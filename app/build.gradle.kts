@@ -8,9 +8,10 @@ plugins {
 }
 
 // Come per Pactum: le chiavi vivono FUORI dal repo e da OneDrive.
-// C:\Users\andre\sol-keys\sol.properties → picovoiceAccessKey=...
-// Se il file manca l'app compila e funziona lo stesso: la wake word resta
-// spenta e si usa il pulsante Parla (push-to-talk).
+// C:\Users\andre\sol-keys\sol.properties →
+//   picovoiceAccessKey=...   (wake word; senza → push-to-talk)
+//   anthropicApiKey=...      (Claude; senza → CervelloEco, l'app ripete e basta)
+// Se il file manca l'app compila e funziona lo stesso, con meno funzioni.
 val chiaviFile = file("C:/Users/andre/sol-keys/sol.properties")
 val chiavi = Properties().apply {
     if (chiaviFile.exists()) {
@@ -26,12 +27,17 @@ android {
         applicationId = "eu.stgm.sol"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         buildConfigField(
             "String",
             "PICOVOICE_ACCESS_KEY",
             "\"${chiavi.getProperty("picovoiceAccessKey") ?: ""}\"",
+        )
+        buildConfigField(
+            "String",
+            "ANTHROPIC_API_KEY",
+            "\"${chiavi.getProperty("anthropicApiKey") ?: ""}\"",
         )
     }
 
@@ -70,10 +76,12 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
     implementation(libs.porcupine.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    // Il cancello conferme è l'unico punto dove un bug diventa un danno dal
-    // vivo: la sua logica pura (normalizzazione frase, regole di rischio,
-    // frasi degli esiti) si prova su JVM, senza telefono.
+    // Logica pura su JVM: cancello, esecutore, date, archivio, corpo delle
+    // richieste a Claude. org.json vero in test (quello di android.jar è
+    // uno stub che tira eccezioni).
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }

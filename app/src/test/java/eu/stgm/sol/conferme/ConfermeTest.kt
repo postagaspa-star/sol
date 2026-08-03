@@ -1,5 +1,6 @@
 package eu.stgm.sol.conferme
 
+import eu.stgm.sol.cervello.DefinizioniTool
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,18 +33,12 @@ class ConfermeTest {
         assertTrue(Normalizzatore.normalizza("lascia perdere") in CancelloConferme.FRASI_ANNULLA)
     }
 
+    // I tool dichiarati a Claude e le regole di rischio devono restare la
+    // stessa lista: un tool senza classe di rischio finirebbe ROSSO per il
+    // ripiego prudente, uno con rischio ma senza definizione non esisterebbe.
     @Test
-    fun `ogni tool della fase 1 ha una classe di rischio`() {
-        val attesi = listOf(
-            "lista_promemoria",
-            "crea_promemoria",
-            "completa_promemoria",
-            "sposta_promemoria",
-            "elimina_promemoria",
-        )
-        attesi.forEach {
-            assertTrue("manca la classe di rischio per $it", it in RegoleDiRischio.perTool)
-        }
+    fun `tool dichiarati a claude e regole di rischio sono allineati`() {
+        assertEquals(DefinizioniTool.NOMI.toSet(), RegoleDiRischio.perTool.keys)
     }
 
     @Test

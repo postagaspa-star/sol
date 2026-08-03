@@ -8,29 +8,36 @@ import kotlin.time.Duration.Companion.seconds
 //   VERDE  → esegui e basta
 //   GIALLO → esegui subito, poi "annulla" resta caldo per qualche secondo
 //   ROSSO  → doppia conferma: card a schermo + frase dedicata a voce.
-// La frase rossa vale solo mentre la finestra è aperta, il confronto è
-// deterministico (Normalizzatore), il timeout ANNULLA e lo dice a voce.
-// Un "sì" generico non basta mai per il rosso.
+// Il riepilogo viene LETTO prima di ascoltare (dice esattamente cosa sta
+// per succedere e come confermare), la frase vale solo mentre la finestra
+// è aperta, il confronto è deterministico (Normalizzatore), il timeout
+// ANNULLA — e l'annullamento parla, come ogni esito. Un "sì" generico non
+// basta mai per il rosso.
 //
 // Le dipendenze sono lambda per due motivi: il cancello resta collaudabile
-// su JVM, e non sa nulla di Android — sa solo ascoltare una frase e mostrare
-// una card (la card vera arriva con la milestone 3).
+// su JVM, e non sa nulla di Android — sa solo leggere una frase, ascoltarne
+// una e mostrare una card (quella vera arriva con la milestone 3).
 class CancelloConferme(
+    private val leggi: suspend (String) -> Unit,
     private val ascoltaFrase: suspend () -> String?, // null = non ha sentito nulla
     private val mostraCard: suspend (Proposta) -> CardConferma,
 ) {
 
-    suspend fun doppiaConferma(proposta: Proposta): Esito {
+    suspend fun doppiaConferma(proposta: Proposta, riepilogo: String): Esito {
         val card = mostraCard(proposta)
-        val udito = withTimeoutOrNull(FINESTRA) { ascoltaFrase() }
-        card.chiudi()
-        val normalizzato = udito?.let(Normalizzatore::normalizza)
-        return when {
-            card.pulsantePremuto -> Esito.Confermato("Confermato: eseguo.")
-            udito == null -> Esito.AnnullatoTimeout
-            normalizzato == FRASE_ROSSA -> Esito.Confermato("Confermato: eseguo.")
-            normalizzato in FRASI_ANNULLA -> Esito.AnnullatoDallUtente
-            else -> Esito.AnnullatoFraseDiversa
+        try {
+            leggi(riepilogo)
+            val udito = withTimeoutOrNull(FINESTRA) { ascoltaFrase() }
+            val normalizzato = udito?.let(Normalizzatore::normalizza)
+            return when {
+                card.pulsantePremuto -> Esito.Confermato("Confermato: eseguo.")
+                udito == null -> Esito.AnnullatoTimeout
+                normalizzato == FRASE_ROSSA -> Esito.Confermato("Confermato: eseguo.")
+                normalizzato in FRASI_ANNULLA -> Esito.AnnullatoDallUtente
+                else -> Esito.AnnullatoFraseDiversa
+            }
+        } finally {
+            card.chiudi()
         }
     }
 
@@ -45,9 +52,14 @@ class CancelloConferme(
 }
 
 // Contratto minimo della card di conferma: la UI vera (payload esatto in
-// vista, pulsante esplicito "Elimina davvero…") arriva con la milestone 3,
-// ma il cancello è già collaudabile per la via vocale.
+// vista, pulsante esplicito "Elimina davvero…") arriva con la milestone 3.
 interface CardConferma {
     val pulsantePremuto: Boolean
     fun chiudi()
+}
+
+// Milestone 2: il rosso funziona per la sola via vocale.
+object CardVoceStub : CardConferma {
+    override val pulsantePremuto = false
+    override fun chiudi() {}
 }

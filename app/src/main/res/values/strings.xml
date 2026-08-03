@@ -3,13 +3,18 @@
     <string name="app_name">Sol</string>
     <string name="canale_servizio">Ascolto di Sol</string>
     <string name="canale_avvisi">Avvisi di Sol</string>
+    <string name="canale_promemoria">Promemoria</string>
     <string name="tile_label">Orecchio di Sol</string>
+    <string name="promemoria">Promemoria</string>
 
     <string name="stato_vigile">In ascolto: di\' «Ehi Sol»</string>
     <string name="stato_vigile_prova">In ascolto (parola di prova: «Porcupine»)</string>
     <string name="stato_solo_pulsante">Wake word spenta: usa il pulsante Parla</string>
     <string name="stato_silenziato">Orecchio spento</string>
     <string name="stato_ascolto">Ti ascolto…</string>
+    <string name="stato_elabora">Ci sto pensando…</string>
+    <string name="stato_conferma">Aspetto la conferma a voce…</string>
+    <string name="stato_annulla">Puoi dire: annulla</string>
     <string name="stato_risponde">Sto rispondendo…</string>
     <string name="azione_parla">Parla</string>
 
