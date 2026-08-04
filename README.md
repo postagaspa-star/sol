@@ -1,66 +1,72 @@
-# Sol — assistente vocale
+# Sol
 
-App Android nativa: promemoria, calendario ed email gestiti **solo a voce**, con
-wake word «Ehi Sol» sempre attiva e conferma esplicita sulle azioni
-irreversibili.
+A native Android assistant that runs on voice alone. Reminders, calendar and
+email, with an always-listening wake word and a spoken confirmation step before
+anything destructive happens. The app speaks Italian, because that's who it was
+built for.
 
-## Perché esiste
+## Why it exists
 
-Nasce per un utente reale, non generico: mio padre, perito industriale, che
-lavora in cantiere con le mani occupate e non userebbe mai un'app di task da
-tastiera. Il vincolo di partenza è che tutto il giro — dettatura, conferma,
-esito — deve funzionare senza guardare lo schermo.
+I built this for one specific person: my father. He's an industrial surveyor, he
+works on site with his hands full, and he is never going to open a task app and
+type into it. So the constraint was fixed before any code existed — the whole
+loop, dictation through confirmation through result, has to work without looking
+at the screen.
 
-Questo rende il problema più severo di un normale assistente vocale: se l'utente
-non guarda, ogni errore silenzioso è un errore invisibile. Da qui le due regole
-che governano il codice.
+That's a harsher requirement than it sounds. If nobody is watching the screen, a
+silent failure is an invisible failure. Both rules below fall out of that.
 
-## Le due regole
+## The two rules
 
-1. **Claude propone, il codice dispone.** Il modello emette proposte di azione
-   (tool call); la classe di rischio — VERDE / GIALLO / ROSSO — la decide
-   `conferme/Rischio.kt`, mai il modello. Un LLM non è autorizzato a stabilire
-   quanto è pericolosa la propria richiesta.
-2. **Ogni esito parla.** Successo, annullamento, timeout, errore: il giro si
-   chiude sempre con una frase. Il silenzio non è mai una risposta valida.
+**Claude proposes, the code disposes.** The model emits tool calls. The risk
+class attached to each one — green, yellow, red — is decided by
+`conferme/Rischio.kt`, never by the model. An LLM doesn't get to rate how
+dangerous its own request is.
 
-## Come funziona un giro
+**Every outcome is spoken.** Success, cancellation, timeout, error: the turn
+always closes with a sentence. Silence is never a valid answer.
 
-«Ehi Sol» → beep → comando → Haiku 4.5 con un system prompt che contiene data,
-ora e promemoria correnti → ogni `tool_use` passa dal cancello:
+## One turn, end to end
 
-- **VERDE** (elenca, annulla): esegue e basta.
-- **GIALLO** (crea, completa, sposta): esegue subito, poi il microfono resta
-  aperto ~30 secondi e «annulla» — a voce nuda, senza wake word — rimette tutto
-  com'era.
-- **ROSSO** (elimina): Sol legge il riepilogo e aspetta la frase «timbro e
-  firma», confrontata in modo deterministico. Timeout, frase diversa o «annulla»
-  annullano l'azione, e lo dice a voce.
+Wake word, beep, command, then Haiku 4.5 with a system prompt carrying the
+current date, time and reminders. Every `tool_use` it returns passes through the
+gate:
+
+- **Green** (list, cancel) just runs.
+- **Yellow** (create, complete, reschedule) runs immediately, then the mic stays
+  open for about thirty seconds. Saying "annulla" — bare, no wake word needed —
+  puts everything back.
+- **Red** (delete) gets read back as a summary, and Sol waits for the passphrase
+  "timbro e firma", matched deterministically. A timeout, a different phrase, or
+  a cancel all abort the action, and it says so out loud.
 
 ## Stack
 
-Kotlin, Android nativo (minSdk 26). Wake word con Porcupine (Picovoice),
-trascrizione via `SpeechRecognizer`, sintesi vocale TTS. Cervello: Claude Haiku
-4.5 su REST con loop tool scritto a mano. Archivio promemoria in JSON locale con
-scrittura atomica, sveglie esatte via `AlarmManager`. Zero OAuth, zero cloud
-oltre a Claude.
+Kotlin, native Android, minSdk 26. Porcupine (Picovoice) for the wake word,
+`SpeechRecognizer` for transcription, system TTS for the voice. Claude Haiku 4.5
+over REST with a hand-rolled tool loop. Reminders live in a local JSON file
+written atomically, alarms go through `AlarmManager` with exact scheduling. No
+OAuth, and no cloud beyond the Anthropic call.
 
-## Note tecniche
+## Things worth knowing
 
-- **Degradazione a gradini**: senza chiave Picovoice la wake word sparisce ma
-  resta il pulsante Parla; senza chiave Anthropic entra `CervelloEco`, che
-  ripete e basta. L'app non si rifiuta mai di partire.
-- **Un solo punto che esegue**: `EsecutoreProposte` è l'unico componente che
-  tocca lo stato. Il cancello sta a monte, quindi non esistono scorciatoie.
-- **Limite di sistema, non bug**: dopo un riavvio Android blocca il microfono ai
-  servizi auto-avviati. Sol se ne accorge e manda una notifica: un tocco e
-  riparte.
+**It degrades in steps instead of failing.** Without a Picovoice key the wake
+word disappears but a push-to-talk button remains. Without an Anthropic key it
+falls back to `CervelloEco`, which just repeats what it heard. The app always
+starts.
 
-## Stato
+**Exactly one component mutates state.** `EsecutoreProposte` is the only path
+that touches anything, and the gate sits in front of it, so there's no side door.
 
-M1 e M2 completate (pipeline vocale, 6 tool, archivio e sveglie, verde/giallo con
-annulla a caldo, rosso vocale). In corso: card rossa a schermo e collaudo sul
-campo.
+**A platform limit, not a bug.** After a phone reboot Android withholds the
+microphone from auto-started services. Sol notices, fires a notification, and one
+tap brings it back.
 
-Le chiavi API vivono fuori dal repository, in un file `sol.properties` non
-versionato.
+## Status
+
+M1 and M2 are done: the voice pipeline, six tools, the reminder store and alarms,
+green and yellow with the hot undo window, and the spoken red path. Next is the
+on-screen red confirmation card, then field testing with the person it's for.
+
+API keys live in a `sol.properties` file outside the repository and are never
+versioned.
