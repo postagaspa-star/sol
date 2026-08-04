@@ -1,73 +1,66 @@
-# Sol — assistente vocale per papà
+# Sol — assistente vocale
 
-App Android nativa: task, calendario ed email gestiti solo a voce, con wake
-word «Ehi Sol» sempre attiva e doppia conferma sulle azioni irreversibili.
+App Android nativa: promemoria, calendario ed email gestiti **solo a voce**, con
+wake word «Ehi Sol» sempre attiva e conferma esplicita sulle azioni
+irreversibili.
 
-## Le due regole della casa
+## Perché esiste
 
-1. **Claude propone, il codice dispone.** Il modello emette proposte di
-   azione (tool call); la classe di rischio — VERDE / GIALLO / ROSSO — la
-   decide `conferme/Rischio.kt`, mai il modello. Il ROSSO richiede la card a
-   schermo **e** la frase vocale «timbro e firma» (confronto deterministico).
+Nasce per un utente reale, non generico: mio padre, perito industriale, che
+lavora in cantiere con le mani occupate e non userebbe mai un'app di task da
+tastiera. Il vincolo di partenza è che tutto il giro — dettatura, conferma,
+esito — deve funzionare senza guardare lo schermo.
+
+Questo rende il problema più severo di un normale assistente vocale: se l'utente
+non guarda, ogni errore silenzioso è un errore invisibile. Da qui le due regole
+che governano il codice.
+
+## Le due regole
+
+1. **Claude propone, il codice dispone.** Il modello emette proposte di azione
+   (tool call); la classe di rischio — VERDE / GIALLO / ROSSO — la decide
+   `conferme/Rischio.kt`, mai il modello. Un LLM non è autorizzato a stabilire
+   quanto è pericolosa la propria richiesta.
 2. **Ogni esito parla.** Successo, annullamento, timeout, errore: il giro si
    chiude sempre con una frase. Il silenzio non è mai una risposta valida.
 
-## Moduli (package sotto `eu.stgm.sol`)
+## Come funziona un giro
 
-| Package      | Ruolo |
-|--------------|-------|
-| `ascolto`    | foreground service, wake word (Porcupine), trascrizione (`SpeechRecognizer`), voce (TTS), tile, riavvio |
-| `cervello`   | Claude Haiku 4.5 via REST (`ClaudeApi`, loop tool scritto a mano), tool (`DefinizioniTool`), `CervelloEco` di ripiego |
-| `conferme`   | il cancello: rischio, esiti parlanti, normalizzazione frase, `CancelloConferme` |
-| `esecuzione` | `EsecutoreProposte` (unico punto che esegue), archivio promemoria su file, sveglie (`PianificatoreAllarmi`) |
-| `dati`       | impostazioni (DataStore), registro azioni JSONL, lettura date a voce |
+«Ehi Sol» → beep → comando → Haiku 4.5 con un system prompt che contiene data,
+ora e promemoria correnti → ogni `tool_use` passa dal cancello:
 
-## Come funziona un giro (milestone 2)
+- **VERDE** (elenca, annulla): esegue e basta.
+- **GIALLO** (crea, completa, sposta): esegue subito, poi il microfono resta
+  aperto ~30 secondi e «annulla» — a voce nuda, senza wake word — rimette tutto
+  com'era.
+- **ROSSO** (elimina): Sol legge il riepilogo e aspetta la frase «timbro e
+  firma», confrontata in modo deterministico. Timeout, frase diversa o «annulla»
+  annullano l'azione, e lo dice a voce.
 
-«Ehi Sol» → beep → comando → Haiku 4.5 col system prompt che contiene data,
-ora e la lista dei promemoria → ogni tool_use passa dal cancello:
+## Stack
 
-- **VERDE** (lista, annulla): esegue e basta.
-- **GIALLO** (crea, completa, sposta): esegue subito; a fine risposta il
-  microfono resta aperto qualche secondo e «annulla» — a voce nuda, senza
-  wake word — rimette tutto com'era (finestra di 30 secondi, vale anche
-  con «Ehi Sol, annulla»).
-- **ROSSO** (elimina): Sol legge il riepilogo e aspetta «timbro e firma».
-  Timeout, frase diversa o «annulla» = azione annullata, **detto a voce**.
-  Un rosso annullato chiude il turno: la frase la dice il codice, non il
-  modello. La card a schermo arriva con la milestone 3.
+Kotlin, Android nativo (minSdk 26). Wake word con Porcupine (Picovoice),
+trascrizione via `SpeechRecognizer`, sintesi vocale TTS. Cervello: Claude Haiku
+4.5 su REST con loop tool scritto a mano. Archivio promemoria in JSON locale con
+scrittura atomica, sveglie esatte via `AlarmManager`. Zero OAuth, zero cloud
+oltre a Claude.
 
-Le scadenze suonano come notifiche (sveglie esatte, rimesse a ogni riavvio
-o aggiornamento). L'archivio è un JSON locale con scrittura atomica: zero
-OAuth, zero cloud oltre a Claude.
+## Note tecniche
 
-## Chiavi (`C:\Users\andre\sol-keys\sol.properties`, fuori da repo e OneDrive)
+- **Degradazione a gradini**: senza chiave Picovoice la wake word sparisce ma
+  resta il pulsante Parla; senza chiave Anthropic entra `CervelloEco`, che
+  ripete e basta. L'app non si rifiuta mai di partire.
+- **Un solo punto che esegue**: `EsecutoreProposte` è l'unico componente che
+  tocca lo stato. Il cancello sta a monte, quindi non esistono scorciatoie.
+- **Limite di sistema, non bug**: dopo un riavvio Android blocca il microfono ai
+  servizi auto-avviati. Sol se ne accorge e manda una notifica: un tocco e
+  riparte.
 
-```
-picovoiceAccessKey=...   # wake word; senza → pulsante Parla
-anthropicApiKey=...      # Claude; senza → CervelloEco (ripete e basta)
-```
+## Stato
 
-Per la chiave Anthropic: console.anthropic.com, chiave dedicata con spend
-limit basso (5-15 €/mese). Wake word: vedi `app/src/main/assets/LEGGIMI.md`.
+M1 e M2 completate (pipeline vocale, 6 tool, archivio e sveglie, verde/giallo con
+annulla a caldo, rosso vocale). In corso: card rossa a schermo e collaudo sul
+campo.
 
-**Limite di sistema da sapere:** dopo un riavvio del telefono Android blocca
-il microfono ai servizi auto-avviati → arriva una notifica, un tocco e Sol
-riparte. Non è un bug nostro.
-
-## Build
-
-```
-$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
-```
-
-APK in `app/build/outputs/apk/debug/`. Toolchain identica a Pactum
-(AGP 8.7.3, Gradle 8.9, Kotlin 2.0.21, compileSdk 35, minSdk 26).
-
-## Tabella di marcia
-
-- [x] M1 — scheletro + eco vocale (pipeline, registro, tile, riavvio)
-- [x] M2 — CervelloClaude (Haiku 4.5, 6 tool), archivio + sveglie, verde/giallo con annulla a caldo, rosso vocale
-- [ ] M3 — card rossa a schermo (payload esatto + pulsante esplicito) accanto alla via vocale
-- [ ] M4 — collaudo sul campo con papà (metriche dal registro), poi fase 2 calendario
+Le chiavi API vivono fuori dal repository, in un file `sol.properties` non
+versionato.
