@@ -9,22 +9,24 @@ built for.
 
 I built this for one specific person: my father. He's an industrial surveyor, he
 works on site with his hands full, and he is never going to open a task app and
-type into it. So the constraint was fixed before any code existed — the whole
+type into it. So the constraint was fixed before any code existed. The whole
 loop, dictation through confirmation through result, has to work without looking
 at the screen.
 
-That's a harsher requirement than it sounds. If nobody is watching the screen, a
-silent failure is an invisible failure. Both rules below fall out of that.
+That's a harsher requirement than it sounds, because if nobody is watching the
+screen a silent failure becomes an invisible one. Both rules below fall out of
+that.
 
 ## The two rules
 
 **Claude proposes, the code disposes.** The model emits tool calls. The risk
-class attached to each one — green, yellow, red — is decided by
-`conferme/Rischio.kt`, never by the model. An LLM doesn't get to rate how
+class attached to each one, green, yellow or red, is decided by
+`conferme/Rischio.kt` and never by the model, which doesn't get to rate how
 dangerous its own request is.
 
 **Every outcome is spoken.** Success, cancellation, timeout, error: the turn
-always closes with a sentence. Silence is never a valid answer.
+always closes with a sentence, because otherwise silence would be
+indistinguishable from a failure nobody noticed.
 
 ## One turn, end to end
 
@@ -34,8 +36,8 @@ gate:
 
 - **Green** (list, cancel) just runs.
 - **Yellow** (create, complete, reschedule) runs immediately, then the mic stays
-  open for about thirty seconds. Saying "annulla" — bare, no wake word needed —
-  puts everything back.
+  open for about thirty seconds. Saying "annulla", bare, with no wake word
+  needed, puts everything back.
 - **Red** (delete) gets read back as a summary, and Sol waits for the passphrase
   "timbro e firma", matched deterministically. A timeout, a different phrase, or
   a cancel all abort the action, and it says so out loud.
@@ -52,15 +54,15 @@ OAuth, and no cloud beyond the Anthropic call.
 
 **It degrades in steps instead of failing.** Without a Picovoice key the wake
 word disappears but a push-to-talk button remains. Without an Anthropic key it
-falls back to `CervelloEco`, which just repeats what it heard. The app always
-starts.
+falls back to `CervelloEco`, which just repeats what it heard. Either way the app
+still starts.
 
 **Exactly one component mutates state.** `EsecutoreProposte` is the only path
-that touches anything, and the gate sits in front of it, so there's no side door.
+that touches anything, with the gate sitting in front of it.
 
-**A platform limit, not a bug.** After a phone reboot Android withholds the
-microphone from auto-started services. Sol notices, fires a notification, and one
-tap brings it back.
+**A platform limit rather than a bug.** After a phone reboot Android withholds
+the microphone from auto-started services. Sol notices, fires a notification, and
+one tap brings it back.
 
 ## Status
 
