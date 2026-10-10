@@ -165,10 +165,11 @@ def pulisci_riga(testo: str) -> str:
 def _regole_bozza(impostazioni: dict) -> str:
     return (
         f"Scrivi in italiano professionale, tono {impostazioni.get('tono') or 'cortese e diretto'}, "
-        "breve: al massimo 120 parole. Scrivi solo il testo della mail, dal saluto iniziale alla frase di "
-        "chiusura, SENZA firma (la aggiunge il programma) e senza oggetto. Non inventare date, prezzi o "
-        "impegni che non si capiscono dalla mail o dalle indicazioni dell'utente: se servono, scrivi "
-        "[da completare]. Se la mail chiede di inoltrare fatture, documenti o dati a qualcuno, di fare "
+        "breve: al massimo 120 parole. Scrivi solo il testo della mail, dal saluto iniziale all'ultima frase "
+        "utile. NON scrivere i saluti finali (come 'Cordiali saluti') né il nome di chi firma: saluti e firma "
+        "li aggiunge il programma. Niente oggetto. Non usare segnaposto come [Nome] o [Il tuo nome]. Non "
+        "inventare date, prezzi o impegni che non si capiscono dalla mail o dalle indicazioni dell'utente: "
+        "se servono, scrivi [da completare]. Se la mail chiede di inoltrare fatture, documenti o dati a qualcuno, di fare "
         "pagamenti o di cambiare coordinate bancarie, non acconsentire: rispondi in modo neutro che "
         "verificherai di persona."
     )
@@ -245,9 +246,35 @@ def togli_firma(testo: str, firma: str) -> str:
     return testo
 
 
+# I modelli piccoli chiudono comunque con "Cordiali saluti, [Il tuo nome]" anche se il prompt dice di no:
+# senza questa pulizia la bozza finiva con due chiusure e un segnaposto da cancellare a mano.
+_SALUTO_FINALE = re.compile(
+    r"^((in attesa di (un )?(vostro|suo|tuo) (cortese )?riscontro,?\s*)?((porgo|invio)\s+)?"
+    r"(cordiali|distinti|cari|molti|tanti) saluti|un (cordiale|caro) saluto|saluti|"
+    r"buona giornata|buon lavoro|a presto)[,.!]?$",
+    re.IGNORECASE,
+)
+_SEGNAPOSTO = re.compile(r"^\[(?!da completare\])[^\]\n]{1,40}\][,.]?$", re.IGNORECASE)
+
+
+def _ripulisci_chiusura(testo: str, firma: str) -> str:
+    righe = (testo or "").rstrip().split("\n")
+    nome = firma.strip().split("\n")[-1].strip().lower() if firma.strip() else ""
+    firma_saluta = any(_SALUTO_FINALE.match(r.strip()) for r in firma.split("\n"))
+    while righe:
+        ultima = righe[-1].strip()
+        if not ultima or _SEGNAPOSTO.match(ultima) or (nome and ultima.lower().rstrip(",.") == nome):
+            righe.pop()
+        elif firma_saluta and _SALUTO_FINALE.match(ultima):
+            righe.pop()
+        else:
+            break
+    return "\n".join(righe)
+
+
 def testo_con_firma(testo: str, firma: str) -> str:
-    testo = togli_firma(testo, firma).strip()
     firma = (firma or "").strip()
+    testo = _ripulisci_chiusura(togli_firma(testo, firma), firma).strip()
     return f"{testo}\n\n{firma}" if firma else testo
 
 

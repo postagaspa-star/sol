@@ -64,3 +64,12 @@ docs/       the API contract, written before the code
   never from the public internet.
 
 API keys and passwords live in an `.env` file on the NAS and are never versioned.
+
+## Status
+
+Version 1.0: server and classifier running on the NAS, Android and Windows apps built,
+every piece reviewed adversarially before release. Next is connecting the real mailboxes
+and a few weeks of use, to tune the sorting threshold on real corrections.
+
+I make the product and design calls and find the behavioural problems by using
+the thing; Claude writes the implementation and finds the bugs a few layers down.

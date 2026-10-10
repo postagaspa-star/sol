@@ -189,9 +189,10 @@ def test_risvegli_non_fanno_ripartire_una_genera_appena_fallita(client, auth, fi
         assert servizi.lavoro.passo_scrittore() == "guasto"
     assert len(decisore.generati) == chiamate
     with db.aperta(app.state.settings.db_path) as conn:
-        # Contato solo il tentativo vero (la prima bozza), non i giri in pausa.
-        assert conn.execute("SELECT SUM(tentativi) FROM bozze").fetchone()[0] == 1
-        assert conn.execute("SELECT MAX(tentativi_riassunto) FROM mail").fetchone()[0] == 0
+        # Contato solo il tentativo vero (il primo lavoro: un riassunto di una riga, che passa
+        # prima delle bozze in sottofondo), non i giri in pausa.
+        assert conn.execute("SELECT SUM(tentativi_riassunto) FROM mail").fetchone()[0] == 1
+        assert conn.execute("SELECT COALESCE(SUM(tentativi), 0) FROM bozze").fetchone()[0] == 0
 
 
 # --- smistamento prima delle bozze in sottofondo ----------------------------------------------------

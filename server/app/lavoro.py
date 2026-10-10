@@ -445,12 +445,13 @@ class Lavoro:
         if r is not None:
             return "richiesto", r
         b = conn.execute(
-            "SELECT * FROM bozze WHERE stato = 'in_preparazione' AND (richiesta_utente = 1"
-            " OR prossimo_tentativo IS NULL OR prossimo_tentativo <= ?) ORDER BY richiesta_utente DESC, id LIMIT 1",
-            (ora,),
+            "SELECT * FROM bozze WHERE stato = 'in_preparazione' AND richiesta_utente = 1 ORDER BY id LIMIT 1"
         ).fetchone()
         if b is not None:
             return "bozza", b
+        # I riassunti di una riga prima delle bozze in sottofondo: costano poco e servono subito a
+        # scorrere l'elenco. Col solo scrittore locale (~5 token/s) la prova sul NAS li mostrava
+        # dopo un quarto d'ora, in coda a tutte le bozze.
         m = conn.execute(
             "SELECT * FROM mail WHERE riassunto IS NULL AND tentativi_riassunto < ?"
             " AND (prossimo_riassunto IS NULL OR prossimo_riassunto <= ?) ORDER BY ricevuta_il DESC, id DESC LIMIT 1",
@@ -458,6 +459,13 @@ class Lavoro:
         ).fetchone()
         if m is not None:
             return "riga", m
+        b = conn.execute(
+            "SELECT * FROM bozze WHERE stato = 'in_preparazione'"
+            " AND (prossimo_tentativo IS NULL OR prossimo_tentativo <= ?) ORDER BY id LIMIT 1",
+            (ora,),
+        ).fetchone()
+        if b is not None:
+            return "bozza", b
         # Scadenze: dalle mail valutate, mai da quelle smistate tra le newsletter. Una mail
         # da_controllare (anche se proposta come newsletter) può essere una richiesta vera.
         m = conn.execute(
