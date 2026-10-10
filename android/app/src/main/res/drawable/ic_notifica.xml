@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icona della barra di stato: solo forma bianca, Android la colora. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,5h18v14H3V5zM5,7.3V17h14V7.3l-7,5.2L5,7.3zM6.6,7l5.4,4l5.4,-4H6.6z" />
+</vector>

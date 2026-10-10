@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema piattaforma senza AppCompat: la UI vera è tutta Compose/Material 3.
+         Serve solo a non avere un lampo di colore sbagliato all'avvio. -->
+    <style name="Theme.Sol" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/fondo_avvio</item>
+    </style>
+</resources>

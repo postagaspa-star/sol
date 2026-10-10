@@ -1,0 +1,14 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# La firma non entra MAI nel repo: vive in C:\Users\andre\sol-keys
+*.keystore
+*.jks
+keystore.properties

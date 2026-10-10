@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Aggiornamento automatico: scarica l'APK dal server di casa e lo passa a
+         PackageInstaller. La firma con la stessa chiave è la garanzia che sia Sol. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+
+    <!-- usesCleartextTraffic: durante l'installazione il server si raggiunge anche
+         in rete di casa (http://192.168.x.x). L'app parla in chiaro SOLO con
+         192.168.x.x, 10.x.x.x e 172.16-31.x.x (contratto 15.13, IndirizzoServer e
+         SolClient lo controllano a ogni richiesta), mai per mandare password;
+         per tutto il resto vuole https. Android non sa esprimere "solo questi
+         intervalli di indirizzi", quindi il controllo è nel codice.
+         Backup e trasferimento esclusi del tutto (regole_backup.xml). -->
+    <application
+        android:name=".SolApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/regole_backup"
+        android:fullBackupContent="@xml/backup_vecchio"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/nome_app"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.Sol">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Esito della sessione PackageInstaller: lo invoca solo il sistema. -->
+        <receiver
+            android:name=".aggiornamento.AggiornamentoReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Dopo il riavvio del telefono o un aggiornamento: i controlli ripartono. -->
+        <receiver
+            android:name=".notifiche.AvvioReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
