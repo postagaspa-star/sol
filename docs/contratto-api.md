@@ -1,8 +1,8 @@
-# Sol — contratto delle API (v1.2)
+# Sol — contratto delle API (v1.3)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
 Le novità della v1.1 (dopo la prima revisione) sono raccolte nella sezione 15, quelle della v1.2
-(possibile truffa) nella sezione 16: valgono sopra il testo delle sezioni precedenti dove lo contraddicono.
+(possibile truffa) nella sezione 16, quelle della v1.3 (colori, "Da fare") nella 17: valgono sopra il testo delle sezioni precedenti dove lo contraddicono.
 Repo pubblico: negli esempi e nei test solo dati finti (Rossi, Bianchi, `@esempio.it`).
 
 ## 0. Cos'è Sol
@@ -428,3 +428,18 @@ un indirizzo noto può essere stato rubato.
 - Filtro "Possibili truffe" con il numero da `conteggi.sospette`, mostrato solo se è maggiore di zero.
 - Conferma d'invio di una risposta a una mail sospetta: avviso in più in rosso, "Stai rispondendo a una mail
   segnalata come possibile truffa", e il pulsante d'invio dice "Invia lo stesso".
+
+## 17. Novità della v1.3: colori e "Da fare"
+
+Servono al nuovo aspetto delle app (`docs/aspetto.md`).
+
+- `Gruppo` aggiunge `"colore"`: uno di `blu`, `verde`, `ambra`, `viola`, `grigio`, `ardesia`, `petrolio`,
+  `rosa`, `indaco`, `oliva`, `marrone`, `ciano`. I 6 gruppi iniziali: Clienti `blu`, Fornitori `verde`,
+  Amministrazione e fatture `ambra`, PEC ed enti `viola`, Newsletter `grigio`, Altro `ardesia` (anche per i
+  database già esistenti: la migrazione li assegna). Un gruppo nuovo senza colore riceve il primo colore
+  dell'elenco non ancora usato (se sono tutti usati, si ricomincia). `POST /api/gruppi` e `PATCH /api/gruppi/{id}`
+  accettano `"colore"`; un nome fuori elenco → 422 con frase semplice e `campo: "colore"`.
+- `GET /api/conteggi` aggiunge `"scadenze_prossime"`: scadenze `aperte` da oggi a 7 giorni compresi
+  (fuso Europe/Rome), escluse quelle di mail sospette.
+- Spostare di nuovo una mail con `impara: true` aggiorna la regola del mittente al gruppo nuovo (è così che
+  funziona "Annulla" dopo il gesto di spostamento).
