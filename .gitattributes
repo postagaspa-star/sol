@@ -1,0 +1,5 @@
+# Gli script che girano su Linux (NAS, container) devono restare con a-capo Unix anche
+# quando il repo viene scaricato su Windows: con CRLF bash si rompe.
+*.sh text eol=lf
+gradlew text eol=lf
+Dockerfile text eol=lf
