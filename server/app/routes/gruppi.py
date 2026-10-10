@@ -57,8 +57,9 @@ def crea(corpo: GruppoIn, conn: sqlite3.Connection = Depends(get_conn)):
     # La descrizione dice al decisore che mail ci vanno (contratto 15.14); se manca, il nome.
     descrizione = riga(corpo.descrizione or "", 200) or nome
     ordine = conn.execute("SELECT COALESCE(MAX(ordine), 0) + 1 FROM gruppi").fetchone()[0]
+    colore = corpo.colore or db.colore_libero(conn)  # contratto 17
     cur = conn.execute(
-        "INSERT INTO gruppi (nome, ordine, descrizione) VALUES (?, ?, ?)", (nome, ordine, descrizione)
+        "INSERT INTO gruppi (nome, ordine, descrizione, colore) VALUES (?, ?, ?, ?)", (nome, ordine, descrizione, colore)
     )
     return JSONResponse(status_code=201, content=forme.gruppo(_gruppo(conn, cur.lastrowid)))
 
@@ -77,6 +78,8 @@ def modifica(gruppo_id: int, corpo: GruppoPatch, conn: sqlite3.Connection = Depe
         conn.execute("UPDATE gruppi SET descrizione = ? WHERE id = ?", (descrizione, gruppo_id))
     if corpo.ordine is not None:
         conn.execute("UPDATE gruppi SET ordine = ? WHERE id = ?", (corpo.ordine, gruppo_id))
+    if corpo.colore is not None:
+        conn.execute("UPDATE gruppi SET colore = ? WHERE id = ?", (corpo.colore, gruppo_id))
     return forme.gruppo(_gruppo(conn, gruppo_id))
 
 

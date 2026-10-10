@@ -97,6 +97,12 @@ def conteggi(conn: sqlite3.Connection = Depends(get_conn)):
             " AND (letta = 0 OR (da_rispondere = 1 AND risposta_data = 0))"
         ),
         "sospette": numero("SELECT COUNT(*) FROM mail WHERE sospetta = 1"),  # 16.2: non ancora chiarite
+        # 17: aperte da oggi a 7 giorni compresi (giorni italiani), non quelle di possibili truffe.
+        "scadenze_prossime": conn.execute(
+            "SELECT COUNT(*) FROM scadenze s LEFT JOIN mail m ON m.id = s.mail_id WHERE s.stato = 'aperta'"
+            " AND s.quando >= ? AND s.quando <= ? AND COALESCE(m.sospetta, 0) = 0",
+            (clock.oggi().isoformat(), (clock.oggi() + timedelta(days=7)).isoformat()),
+        ).fetchone()[0],
         "da_controllare": numero("SELECT COUNT(*) FROM mail WHERE smistamento = 'da_controllare'"),
         "da_leggere": numero("SELECT COUNT(*) FROM mail WHERE letta = 0"),
         "bozze_pronte": numero("SELECT COUNT(*) FROM bozze WHERE stato = 'pronta'"),

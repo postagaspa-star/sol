@@ -27,15 +27,21 @@ class CasellaPatch(Corpo):
     nome: str = Field(min_length=1, max_length=60)
 
 
+Colore = Literal["blu", "verde", "ambra", "viola", "grigio", "ardesia", "petrolio", "rosa", "indaco", "oliva",
+                 "marrone", "ciano"]  # contratto 17 (lo stesso elenco di db.COLORI)
+
+
 class GruppoIn(Corpo):
     nome: str = Field(min_length=1, max_length=40)
     descrizione: str | None = Field(default=None, max_length=200)
+    colore: Colore | None = None
 
 
 class GruppoPatch(Corpo):
     nome: str | None = Field(default=None, min_length=1, max_length=40)
     ordine: int | None = Field(default=None, ge=0, le=1000)
     descrizione: str | None = Field(default=None, max_length=200)
+    colore: Colore | None = None
 
 
 class RegolaIn(Corpo):

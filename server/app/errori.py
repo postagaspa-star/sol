@@ -83,6 +83,8 @@ FRASI_CAMPI = {
     "ordine": "La posizione del gruppo deve essere un numero tra 0 e 1000.",
     "mail_id": "La mail indicata non va bene.",
     "soglia_truffa": "La soglia per le possibili truffe deve essere un numero tra 0,2 e 0,9.",
+    "colore": ("Questo colore non c'è. Scegli tra blu, verde, ambra, viola, grigio, ardesia, petrolio, rosa, "
+               "indaco, oliva, marrone e ciano."),
     "sospetta": "Va indicato se la mail è una possibile truffa o no.",
 }
 

@@ -304,12 +304,37 @@ def _semina_3(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE mail SET truffa_valutata = 1 WHERE smistamento != 'in_attesa' AND da_rispondere IS NOT NULL")
 
 
+# v1.3 (contratto 17): il colore di ogni gruppo, da un elenco fisso.
+COLORI = ["blu", "verde", "ambra", "viola", "grigio", "ardesia", "petrolio", "rosa", "indaco", "oliva",
+          "marrone", "ciano"]
+COLORI_INIZIALI = {"clienti": "blu", "fornitori": "verde", "amministrazione": "ambra", "pec": "viola",
+                   "newsletter": "grigio", "altro": "ardesia"}
+SCHEMA_4 = """
+ALTER TABLE gruppi ADD COLUMN colore TEXT
+"""
+
+
+def colore_libero(conn: sqlite3.Connection) -> str:
+    """Il primo colore dell'elenco non ancora usato; se sono tutti usati si ricomincia
+    (il primo tra i meno usati)."""
+    usati = [r[0] for r in conn.execute("SELECT colore FROM gruppi WHERE colore IS NOT NULL")]
+    return min(COLORI, key=lambda c: (usati.count(c), COLORI.index(c)))
+
+
+def _semina_4(conn: sqlite3.Connection) -> None:
+    for chiave, colore in COLORI_INIZIALI.items():
+        conn.execute("UPDATE gruppi SET colore = ? WHERE chiave = ?", (colore, chiave))
+    for riga in conn.execute("SELECT id FROM gruppi WHERE colore IS NULL ORDER BY ordine, id").fetchall():
+        conn.execute("UPDATE gruppi SET colore = ? WHERE id = ?", (colore_libero(conn), riga["id"]))
+
+
 # Migrazioni: (versione, sql, funzione di semina o None). Si aggiunge in fondo,
 # mai si modifica una già rilasciata: un database vecchio le fa tutte in ordine.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
     (2, SCHEMA_2, _semina_2),
     (3, SCHEMA_3, _semina_3),
+    (4, SCHEMA_4, _semina_4),
 ]
 
 

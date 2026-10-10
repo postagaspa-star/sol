@@ -9,7 +9,8 @@ def test_15_4_conteggi(client, auth, finta, servizi):
     scrivi_tutto(servizi)
     c = client.get("/api/conteggi", headers=auth).json()
     tutte = client.get("/api/mail?limite=200", headers=auth).json()["mail"]
-    assert set(c) == {"da_rispondere", "urgenti", "da_controllare", "da_leggere", "bozze_pronte", "gruppi", "sospette"}
+    assert set(c) == {"da_rispondere", "urgenti", "da_controllare", "da_leggere", "bozze_pronte", "gruppi", "sospette",
+                      "scadenze_prossime"}
     assert c["da_rispondere"] == sum(1 for m in tutte if m["da_rispondere"] and not m["risposta_data"] and not m["sospetta"])
     # La mail-trappola è una possibile truffa: conta tra le sospette e da controllare, non tra le urgenti.
     assert c["urgenti"] == 1 and c["da_leggere"] == 10 and c["da_controllare"] == 1 and c["sospette"] == 1
