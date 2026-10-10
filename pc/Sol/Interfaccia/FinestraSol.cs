@@ -4,7 +4,9 @@ using System.Text;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Win32;
 using Sol.Motore;
+using Sol.Sistema;
 
 namespace Sol.Interfaccia;
 
@@ -44,11 +46,36 @@ public sealed class FinestraSol : Form
         ClientSize = new Size(1360, 840);
         MinimumSize = new Size(980, 600);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.FromArgb(0xF6, 0xF7, 0xF9);
+        // Lo sfondo prima che la pagina sia pronta è quello del tema (niente lampo bianco col tema scuro).
+        var scuro = Tema.Scuro();
+        BackColor = Tema.Fondo(scuro);
 
         vista = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
         Controls.Add(vista);
         Load += async (_, _) => await InizializzaAsync();
+        HandleCreated += (_, _) => Tema.BarraDelTitolo(Handle, Tema.Scuro());
+        SystemEvents.UserPreferenceChanged += SuCambioTema;
+        FormClosed += (_, _) => SystemEvents.UserPreferenceChanged -= SuCambioTema;
+    }
+
+    /// <summary>Windows passa da chiaro a scuro (o viceversa): la pagina si adegua da sola, qui la barra del titolo e lo sfondo.</summary>
+    private void SuCambioTema(object? mittente, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category != UserPreferenceCategory.General || IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(() =>
+            {
+                if (IsDisposed) return;
+                var scuro = Tema.Scuro();
+                BackColor = Tema.Fondo(scuro);
+                Tema.BarraDelTitolo(Handle, scuro);
+            });
+        }
+        catch (InvalidOperationException)
+        {
+            // la finestra si sta chiudendo
+        }
     }
 
     public static string? FrammentoSezione(string? sezione) => sezione != null && Sezioni.Contains(sezione) ? sezione : null;

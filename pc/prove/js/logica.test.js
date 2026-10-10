@@ -217,3 +217,57 @@ test('filtro "Possibili truffe" (§16)', () => {
   assert.deepEqual(L.destinazioneDaFrammento('#truffe'), { vista: 'posta', filtro: { tipo: 'truffe' }, mailId: null });
   assert.equal(L.FILTRI.truffe.titolo, 'Possibili truffe');
 });
+
+// --- Aspetto 1.3 (docs/aspetto.md, contratto §17) ---------------------------------------------------
+
+test('colori dei gruppi: il nome del server se è uno dei 12, altrimenti ardesia', () => {
+  assert.deepEqual(L.COLORI_GRUPPI, ['blu', 'verde', 'ambra', 'viola', 'grigio', 'ardesia', 'petrolio', 'rosa', 'indaco', 'oliva', 'marrone', 'ciano']);
+  for (const c of L.COLORI_GRUPPI) assert.equal(L.coloreGruppo(c), c);
+  assert.equal(L.coloreGruppo(' Verde '), 'verde', 'spazi e maiuscole non contano');
+  assert.equal(L.coloreGruppo('fucsia'), 'ardesia');
+  assert.equal(L.coloreGruppo(''), 'ardesia');
+  assert.equal(L.coloreGruppo(null), 'ardesia');
+  assert.equal(L.coloreGruppo(undefined), 'ardesia');
+});
+
+test('iniziali nel cerchio: nome e cognome, enti senza "di", indirizzo se manca il nome', () => {
+  assert.equal(L.iniziali('Mario Rossi', 'rossi@esempio.it'), 'MR');
+  assert.equal(L.iniziali('Comune di Bassano'), 'CB');
+  assert.equal(L.iniziali('Ferramenta Neri S.r.l.'), 'FN', 'la forma societaria non conta');
+  assert.equal(L.iniziali('', 'rossi@esempio.it'), 'RO');
+  assert.equal(L.iniziali(null, 'studio.verdi@esempio.it'), 'SV');
+  assert.equal(L.iniziali('Néri'), 'NÉ');
+  assert.equal(L.iniziali('', ''), '?');
+});
+
+test('segnali di una riga: al massimo due, nell\'ordine truffa, urgente, da controllare, risposta pronta', () => {
+  const pronta = { bozza: { id: 1, stato: 'pronta' } };
+  assert.deepEqual(L.segnaliMail(Object.assign({ sospetta: true, urgenza: 'alta', smistamento: 'da_controllare' }, pronta)), ['truffa', 'urgente']);
+  assert.deepEqual(L.segnaliMail(Object.assign({ urgenza: 'alta', smistamento: 'da_controllare' }, pronta)), ['urgente', 'controllare']);
+  assert.deepEqual(L.segnaliMail(Object.assign({ smistamento: 'da_controllare' }, pronta)), ['controllare', 'pronta']);
+  assert.deepEqual(L.segnaliMail(Object.assign({ risposta_data: true }, pronta)), [], 'già risposta: niente "risposta pronta"');
+  assert.deepEqual(L.segnaliMail({ bozza: { id: 2, stato: 'in_preparazione' } }), []);
+  assert.deepEqual(L.segnaliMail({ urgenza: 'normale', smistamento: 'smistata' }), []);
+});
+
+test('"Da fare": solo le piastrelle sopra zero; senza conteggi tutte, senza numero', () => {
+  const v = L.daFare({ da_rispondere: 5, sospette: 1, da_controllare: 0, scadenze_prossime: 2, urgenti: 9 });
+  assert.deepEqual(v.map((x) => [x.chiave, x.numero]), [['da-rispondere', 5], ['truffe', 1], ['scadenze', 2]]);
+  assert.deepEqual(v.map((x) => x.etichetta), ['Da rispondere', 'Possibili truffe', 'Scadenze della settimana']);
+  assert.deepEqual(v[0].filtro, { tipo: 'da-rispondere' });
+  assert.equal(v[2].vista, 'scadenze', 'le scadenze aprono la loro scheda');
+  assert.deepEqual(L.daFare({ da_rispondere: 0, sospette: 0, da_controllare: 0, scadenze_prossime: 0 }), [], 'tutto a zero: niente');
+  assert.deepEqual(L.daFare({}), []);
+  const senza = L.daFare(null);
+  assert.deepEqual(senza.map((x) => x.chiave), ['da-rispondere', 'truffe', 'da-controllare', 'scadenze']);
+  assert.ok(senza.every((x) => x.numero === null));
+});
+
+test('ora nell\'intestazione della mail aperta: oggi, ieri, poi il giorno per esteso', () => {
+  const adesso = new Date(2026, 9, 10, 15, 0);
+  assert.equal(L.oraIntestazione(new Date(2026, 9, 10, 8, 12).toISOString(), adesso), 'oggi 08:12');
+  assert.equal(L.oraIntestazione(new Date(2026, 9, 9, 17, 5).toISOString(), adesso), 'ieri 17:05');
+  assert.equal(L.oraIntestazione(new Date(2026, 9, 5, 8, 12).toISOString(), adesso), 'lunedì 5 ottobre, 08:12');
+  assert.equal(L.oraIntestazione(new Date(2025, 11, 30, 8, 12).toISOString(), adesso), 'martedì 30 dicembre 2025, 08:12');
+  assert.equal(L.oraIntestazione('non è una data', adesso), '');
+});

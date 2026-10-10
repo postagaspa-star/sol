@@ -32,7 +32,7 @@ public class InterfacciaJsTest
         using var p = processo!;
         var uscita = p.StandardOutput.ReadToEndAsync();
         var errori = p.StandardError.ReadToEndAsync();
-        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(180));
         await p.WaitForExitAsync(limite.Token);
         Assert.True(p.ExitCode == 0, await uscita + await errori);
     }

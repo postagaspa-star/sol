@@ -9,3 +9,6 @@ obj/
 # oppure si indica dove trovarlo in prove/js/jsdom.percorso (percorso di questo computer)
 prove/js/node_modules/
 prove/js/jsdom.percorso
+
+# Fotografie della pagina fatte col server finto (si rifanno quando serve)
+prove/schermate/

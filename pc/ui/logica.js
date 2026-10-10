@@ -324,8 +324,86 @@
     return /^http:\/\//i.test(String(server || ''));
   }
 
+  // --- Aspetto 1.3 (docs/aspetto.md) --------------------------------------------------------
+
+  /** I 12 colori dei gruppi (contratto §17): il server manda il NOME, la pagina lo traduce nelle tinte del tema. */
+  const COLORI_GRUPPI = ['blu', 'verde', 'ambra', 'viola', 'grigio', 'ardesia', 'petrolio', 'rosa', 'indaco', 'oliva', 'marrone', 'ciano'];
+
+  /** Il colore di un gruppo: il nome mandato dal server se è uno dei 12, altrimenti `ardesia`. */
+  function coloreGruppo(nome) {
+    const n = String(nome || '').trim().toLowerCase();
+    return COLORI_GRUPPI.includes(n) ? n : 'ardesia';
+  }
+
+  const PAROLINE = new Set(['di', 'da', 'del', 'della', 'dei', 'delle', 'e', 'ed', 'la', 'il', 'lo', 'le', 'per', 's.r.l.', 'srl', 'spa', 's.p.a.']);
+
+  /** Le iniziali per il cerchio colorato: "Mario Rossi" → MR, "Comune di Bassano" → CB, "rossi@esempio.it" → RO. */
+  function iniziali(nome, indirizzo) {
+    let t = String(nome || '').trim();
+    let separatori = /\s+/;
+    if (!t && indirizzo) {
+      t = String(indirizzo).split('@')[0];
+      separatori = /[\s._-]+/;
+    }
+    // Le sigle della ragione sociale (S.r.l., S.p.A., S.n.c., S.a.s.) non sono un nome.
+    t = t.replace(/[<>"'()\[\]]/g, ' ').replace(/[\s,]+(s\.?\s?r\.?\s?l\.?|s\.?\s?p\.?\s?a\.?|s\.?\s?n\.?\s?c\.?|s\.?\s?a\.?\s?s\.?)\s*$/i, '');
+    const parole = t.split(separatori).filter((x) => x && !PAROLINE.has(x.toLowerCase()) && /[\p{L}\p{N}]/u.test(x));
+    if (!parole.length) return '?';
+    const prima = (x) => Array.from(x.replace(/[^\p{L}\p{N}]/gu, ''))[0] || '';
+    if (parole.length === 1) return Array.from(parole[0].replace(/[^\p{L}\p{N}]/gu, '')).slice(0, 2).join('').toUpperCase() || '?';
+    return (prima(parole[0]) + prima(parole[parole.length - 1])).toUpperCase();
+  }
+
+  /**
+   * I segnali di una riga, al massimo due e in quest'ordine (docs/aspetto.md, §1): possibile truffa, urgente,
+   * da controllare, risposta pronta. Una risposta già data non mostra "risposta pronta" (§15.13).
+   */
+  function segnaliMail(m) {
+    const s = [];
+    if (m.sospetta) s.push('truffa');
+    if (m.urgenza === 'alta') s.push('urgente');
+    if (m.smistamento === 'da_controllare') s.push('controllare');
+    if (!m.risposta_data && m.bozza && m.bozza.stato === 'pronta') s.push('pronta');
+    return s.slice(0, 2);
+  }
+
+  /**
+   * Il riquadro "Da fare" (docs/aspetto.md, §2): le piastrelle con il loro numero, solo quelle sopra zero.
+   * Senza conteggi (server di prima della v1.1) le piastrelle ci sono tutte, senza numero: i filtri restano a portata.
+   */
+  function daFare(conteggi) {
+    const voci = [
+      { chiave: 'da-rispondere', etichetta: 'Da rispondere', campo: 'da_rispondere', filtro: { tipo: 'da-rispondere' } },
+      { chiave: 'truffe', etichetta: 'Possibili truffe', campo: 'sospette', filtro: { tipo: 'truffe' } },
+      { chiave: 'da-controllare', etichetta: 'Da controllare', campo: 'da_controllare', filtro: { tipo: 'da-controllare' } },
+      { chiave: 'scadenze', etichetta: 'Scadenze della settimana', campo: 'scadenze_prossime', vista: 'scadenze' },
+    ];
+    if (!conteggi || typeof conteggi !== 'object') return voci.map((v) => Object.assign({ numero: null }, v));
+    return voci
+      .map((v) => Object.assign({ numero: Number(conteggi[v.campo]) || 0 }, v))
+      .filter((v) => v.numero > 0);
+  }
+
+  /** L'ora nell'intestazione della mail aperta: "oggi 08:12", "ieri 17:05", "lunedì 6 ottobre, 08:12". */
+  function oraIntestazione(iso, adesso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const ora = adesso ? new Date(adesso) : new Date();
+    const hm = due(d.getHours()) + ':' + due(d.getMinutes());
+    if (stessoGiorno(d, ora)) return 'oggi ' + hm;
+    const ieri = new Date(ora); ieri.setDate(ora.getDate() - 1);
+    if (stessoGiorno(d, ieri)) return 'ieri ' + hm;
+    return GIORNI_LUNGHI[d.getDay()] + ' ' + d.getDate() + ' ' + MESI_LUNGHI[d.getMonth()] + (d.getFullYear() !== ora.getFullYear() ? ' ' + d.getFullYear() : '') + ', ' + hm;
+  }
+
   return {
     FILTRI,
+    COLORI_GRUPPI,
+    coloreGruppo,
+    iniziali,
+    segnaliMail,
+    daFare,
+    oraIntestazione,
     queryPosta,
     destinazioneDaFrammento,
     stessoFiltro,

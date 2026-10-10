@@ -24,6 +24,11 @@
   const MAX_SENZA_CONFERMA = 5;
   const MAX_GRUPPI = 16;
   const ESEMPIO_SERVER = 'https://sol.esempio.ts.net';
+  /** I 12 colori dei gruppi a parole (contratto §17): il colore non è mai l'unica informazione. */
+  const NOMI_COLORI = {
+    blu: 'Blu', verde: 'Verde', ambra: 'Ambra', viola: 'Viola', grigio: 'Grigio', ardesia: 'Ardesia',
+    petrolio: 'Petrolio', rosa: 'Rosa', indaco: 'Indaco', oliva: 'Oliva', marrone: 'Marrone', ciano: 'Ciano',
+  };
 
   const S = {
     motore: null,             // GET /locale/stato
@@ -133,6 +138,14 @@
     tutte: 'M4 5h16v14H4z M4 14h4.5l1.5 2h4l1.5-2H20',
     campana: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20.5h4',
     truffa: 'M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z M12 8v5 M12 16v.5',
+    triangolo: 'M12 3.5l9.5 16.5h-19z M12 9.5v5 M12 17.3v.2',
+    esclamativo: 'M12 4.5v10 M12 18.8v.2',
+    interrogativo: 'M9 8.5a3 3 0 1 1 4.2 2.8c-.8.4-1.2 1-1.2 1.9v.8 M12 18.3v.2',
+    matita: 'M4 20l1-4.5L15.5 5a2 2 0 0 1 3 3L8 18.5z M13.5 7l3 3',
+    freccia: 'M5 12h14 M13 6l6 6-6 6',
+    punti: 'M12 5.5v.4 M12 11.8v.4 M12 18.1v.4',
+    giu: 'M7 10l5 5 5-5',
+    spunta: 'M5 12.5l4.2 4.2L19 7',
   };
 
   // §16.3: il testo dell'avviso in cima a una mail segnalata, parola per parola.
@@ -215,6 +228,9 @@
 
   async function avvia() {
     document.addEventListener('keydown', suTasto);
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest || !e.target.closest('.ancora-menu')) chiudiFinestrelleMail();
+    });
     window.addEventListener('hashchange', () => vaiAlFrammento(location.hash));
     await leggiStato();
     if (!S.motore || !S.motore.abbinato) {
@@ -383,11 +399,8 @@
       const quando = S.memoriaDel ? ' Stai vedendo gli ultimi dati arrivati (' + L.dataLunga(S.memoriaDel) + ').' : '';
       strisce.push(h('div', { class: 'striscia avvertenza fissa' }, 'Sol non riesce a raggiungere il server di casa' + quanto + '.' + quando + ' Riprova da solo ogni minuto.'));
     }
-    if (sa.modalita_prova) {
-      strisce.push(h('div', { class: 'striscia prova' },
-        h('strong', null, 'Modalità prova'),
-        h('span', null, ' Sol per ora suggerisce e non sposta niente nelle caselle vere. Si spegne dalle Impostazioni quando ti fidi.')));
-    }
+    // La modalità prova ha la sua striscia sottile in cima alla Posta (docs/aspetto.md, §2).
+    if (S.dom.prova) S.dom.prova.hidden = !sa.modalita_prova;
     if (sa.scrittore && sa.scrittore.stato === 'non_disponibile') {
       strisce.push(h('div', { class: 'striscia avvertenza' }, 'In questo momento Sol non riesce a scrivere bozze e riassunti. Le mail arrivano e si smistano lo stesso.'));
     }
@@ -443,6 +456,20 @@
     }, icona(nomeIcona), h('span', { class: 'etichetta' }, titolo), cont));
   }
 
+  /** La classe del colore di un gruppo (il server manda il nome; fuori elenco → ardesia). */
+  function classeColore(g) {
+    return 'col-' + L.coloreGruppo(g && g.colore);
+  }
+
+  function gruppoDi(m) {
+    return (m && S.gruppi.find((g) => g.id === m.gruppo_id)) || null;
+  }
+
+  /** Lascia far vedere i movimenti? No se Windows chiede meno animazioni (o se non si può sapere). */
+  function conMovimenti() {
+    return !!(window.matchMedia && !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
   function daLeggereGruppo(g) {
     const c = S.conteggi && S.conteggi.gruppi && S.conteggi.gruppi[String(g.id)];
     return c && typeof c.da_leggere === 'number' ? c.da_leggere : g.da_leggere;
@@ -451,29 +478,39 @@
   function renderMenu() {
     if (!S.dom.menu) return;
     const inPosta = S.vista === 'posta';
-    const c = S.conteggi || {};
-    const fissi = [
-      voceMenu(inPosta && S.filtro.tipo === 'tutte', 'tutte', 'Tutta la posta', null, () => scegliFiltro({ tipo: 'tutte' })),
-      voceMenu(inPosta && S.filtro.tipo === 'da-rispondere', 'rispondi', 'Da rispondere', contatore(c.da_rispondere), () => scegliFiltro({ tipo: 'da-rispondere' })),
-      voceMenu(inPosta && S.filtro.tipo === 'urgenti', 'urgente', 'Urgenti', contatore(c.urgenti), () => scegliFiltro({ tipo: 'urgenti' })),
-      voceMenu(inPosta && S.filtro.tipo === 'da-controllare', 'controlla', 'Da controllare', contatore(c.da_controllare), () => scegliFiltro({ tipo: 'da-controllare' })),
-    ];
-    // §16.3: "Possibili truffe" compare solo quando ce n'è almeno una (o se è il filtro aperto, per non sparire sotto le mani).
-    const sospette = Number(c.sospette) || 0;
-    if (sospette > 0 || (inPosta && S.filtro.tipo === 'truffe')) {
-      const voce = voceMenu(inPosta && S.filtro.tipo === 'truffe', 'truffa', 'Possibili truffe', contatore(sospette), () => scegliFiltro({ tipo: 'truffe' }));
-      voce.firstChild.classList.add('voce-truffa');
-      fissi.push(voce);
-    }
+    const c = S.conteggi;
+    // "Da fare" in cima (docs/aspetto.md, §2): piastrelle che sono filtri, nascoste quando sono a zero.
+    const piastrelle = L.daFare(c).map((v) => {
+      const attiva = v.vista ? S.vista === v.vista : inPosta && L.stessoFiltro(v.filtro, S.filtro);
+      return h('button', {
+        type: 'button',
+        class: 'piastrella ' + v.chiave + (attiva ? ' attiva' : ''),
+        'data-filtro': v.chiave,
+        'aria-pressed': attiva ? 'true' : 'false',
+        onclick: () => (v.vista ? vaiVista(v.vista) : scegliFiltro(v.filtro)),
+      }, v.numero != null ? h('span', { class: 'numero' }, String(v.numero)) : null, h('span', { class: 'etichetta' }, v.etichetta));
+    });
+    const daFare = piastrelle.length ? h('section', { class: 'da-fare', 'aria-label': 'Da fare' }, h('h2', null, 'Da fare'), h('div', { class: 'piastrelle' }, piastrelle)) : null;
+    const tutte = voceMenu(inPosta && S.filtro.tipo === 'tutte', 'tutte', 'Tutta la posta',
+      c && c.da_leggere ? h('span', { class: 'contatore tenue', title: 'Da leggere' }, String(c.da_leggere)) : null,
+      () => scegliFiltro({ tipo: 'tutte' }));
     const gruppi = S.gruppi.map((g, i) => {
       const daLeggere = daLeggereGruppo(g);
-      const li = voceMenu(inPosta && S.filtro.tipo === 'gruppo' && Number(S.filtro.id) === g.id, 'gruppo', g.nome,
+      const attivo = inPosta && S.filtro.tipo === 'gruppo' && Number(S.filtro.id) === g.id;
+      const bersaglio = h('button', {
+        type: 'button',
+        class: 'voce gruppo ' + classeColore(g) + (attivo ? ' attiva' : ''),
+        'aria-current': attivo ? 'page' : null,
+        'data-gruppo': String(g.id),
+        title: g.descrizione || null,
+        onclick: () => scegliFiltro({ tipo: 'gruppo', id: g.id }),
+      },
+        h('span', { class: 'pallino', 'aria-hidden': 'true' }),
+        h('span', { class: 'etichetta' }, g.nome),
         h('span', { class: 'gruppo-dx' },
           daLeggere ? h('span', { class: 'contatore tenue', title: 'Da leggere' }, String(daLeggere)) : null,
-          i < 9 ? h('kbd', { title: 'Premi ' + (i + 1) + ' per spostare qui le mail selezionate' }, String(i + 1)) : null),
-        () => scegliFiltro({ tipo: 'gruppo', id: g.id }));
-      const bersaglio = li.firstChild;
-      bersaglio.dataset.gruppo = String(g.id);
+          i < 9 ? h('kbd', { title: 'Premi ' + (i + 1) + ' per spostare qui le mail selezionate' }, String(i + 1)) : null));
+      // Trascinando una o più mail, il gruppo di destinazione si illumina del suo colore.
       bersaglio.addEventListener('dragover', (e) => {
         if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('text/x-sol-mail')) return;
         e.preventDefault();
@@ -488,7 +525,7 @@
         try { ids = JSON.parse(e.dataTransfer.getData('text/x-sol-mail')); } catch (err) { ids = []; }
         if (Array.isArray(ids) && ids.length) sposta(ids.map(Number), g.id);
       });
-      return li;
+      return h('li', null, bersaglio);
     });
     const altre = [
       voceMenu(S.vista === 'riassunti', 'riassunto', 'Riassunti', null, () => vaiVista('riassunti')),
@@ -498,10 +535,11 @@
       voceMenu(S.vista === 'impostazioni', 'impostazioni', 'Impostazioni', null, () => vaiVista('impostazioni')),
     ];
     svuota(S.dom.menu,
-      h('ul', { class: 'lista-menu' }, fissi),
+      daFare,
+      h('ul', { class: 'lista-menu' }, tutte),
       h('p', { class: 'titoletto' }, 'Gruppi', h('span', { class: 'suggerimento' }, 'trascina qui le mail')),
       h('ul', { class: 'lista-menu gruppi' }, gruppi.length ? gruppi : h('li', { class: 'vuoto-piccolo' }, 'Nessun gruppo')),
-      h('ul', { class: 'lista-menu altre' }, altre));
+      h('ul', { class: 'lista-menu viste' }, altre));
   }
 
   // --- Spostarsi tra le viste e le mail, senza perdere quello che si sta scrivendo -------------------
@@ -646,15 +684,21 @@
     });
     const ricorda = h('input', { type: 'checkbox', id: 'ricorda', checked: S.ricorda, onchange: (e) => { S.ricorda = e.target.checked; } });
     S.dom.titoloElenco = h('h2', { class: 'titolo-elenco' });
+    S.dom.filtroAttivo = h('p', { class: 'filtro-attivo' });
     S.dom.infoSelezione = h('p', { class: 'info-selezione' });
     S.dom.elenco = h('ul', { class: 'elenco-mail', role: 'listbox', 'aria-multiselectable': 'true', 'aria-label': 'Mail', tabindex: '0' });
     S.dom.lettura = h('section', { class: 'lettura', 'aria-label': 'Mail aperta' });
+    // La modalità prova: una striscia sottile ambra in cima alla Posta, non ripetuta in ogni mail.
+    S.dom.prova = h('div', { class: 'striscia-prova', role: 'status', hidden: !(S.salute && S.salute.modalita_prova) },
+      h('strong', null, 'Prova:'), ' Sol suggerisce e non sposta niente.');
     svuota(S.dom.area,
+      S.dom.prova,
       h('section', { class: 'colonna-elenco' },
         h('div', { class: 'testa-elenco' },
           h('div', { class: 'riga-cerca' }, icona('cerca', 'icona-cerca'), cerca),
           h('div', { class: 'riga-titolo' }, S.dom.titoloElenco,
             h('label', { class: 'spunta piccola', title: 'Quando sposti UNA mail, Sol impara a mettere in quel gruppo anche le prossime dello stesso mittente.' }, ricorda, ' Ricordati questo mittente')),
+          S.dom.filtroAttivo,
           S.dom.infoSelezione),
         S.dom.elenco),
       S.dom.lettura);
@@ -687,9 +731,11 @@
       const selezionePrima = chiaveSelezione();
       if (o.silenzioso) {
         const tenere = new Set([...S.selezione, S.aperta && S.aperta.id].filter((x) => x != null));
+        const primaIds = new Set(S.elenco.mail.map((m) => m.id));
         const u = L.unisciElenco(S.elenco.mail, r.dati.mail, !!r.dati.altre, S.elenco.altre, tenere);
         S.elenco.mail = u.mail;
         S.elenco.altre = u.altre;
+        if (primaIds.size) S.elenco.nuove = new Set(u.mail.filter((m) => !primaIds.has(m.id)).map((m) => m.id));
       } else {
         S.elenco.mail = r.dati.mail;
         S.elenco.altre = !!r.dati.altre;
@@ -732,25 +778,31 @@
     return (m.mittente && (m.mittente.nome || m.mittente.indirizzo)) || '(mittente sconosciuto)';
   }
 
+  const SEGNALI = {
+    truffa: () => h('span', { class: 'segno truffa' }, icona('triangolo'), 'Possibile truffa'),
+    urgente: () => h('span', { class: 'segno urgente' }, icona('esclamativo'), 'urgente'),
+    controllare: () => h('span', { class: 'segno controllare' }, icona('interrogativo'), 'da controllare'),
+    pronta: () => h('span', { class: 'segno pronta' }, icona('matita'), 'risposta pronta'),
+  };
+  const PAROLE_SEGNALI = { truffa: 'possibile truffa', urgente: 'urgente', controllare: 'da controllare', pronta: 'risposta pronta' };
+
+  /**
+   * Al massimo due segnali, nell'ordine della guida (truffa, urgente, da controllare, risposta pronta).
+   * Se resta posto, una mail già risposta lo dice piano ("risposta data", grigio): non è un segnale da guardare.
+   */
   function segni(m) {
-    const s = [];
-    // §16.3: "Possibile truffa" prima di tutte le altre etichette.
-    if (m.sospetta) s.push(h('span', { class: 'segno truffa' }, 'Possibile truffa'));
-    if (m.urgenza === 'alta') s.push(h('span', { class: 'segno urgente' }, 'Urgente'));
-    if (m.smistamento === 'da_controllare') s.push(h('span', { class: 'segno controllare' }, 'Da controllare'));
-    if (m.pec) s.push(h('span', { class: 'segno pec', title: 'PEC arrivata da ' + (m.pec.mittente_busta || '') }, 'PEC'));
-    // Già risposto (anche da un altro programma): niente "bozza pronta", non c'è più niente da fare (§15.13).
-    if (!m.risposta_data && m.bozza && m.bozza.stato === 'pronta') s.push(h('span', { class: 'segno bozza' }, 'Bozza pronta'));
-    else if (!m.risposta_data && m.bozza && m.bozza.stato === 'in_preparazione') s.push(h('span', { class: 'segno tenue' }, 'Bozza in arrivo'));
-    if (m.da_rispondere && !m.risposta_data) s.push(h('span', { class: 'segno rispondere' }, 'Da rispondere'));
-    if (m.risposta_data) s.push(h('span', { class: 'segno tenue' }, 'Risposta data'));
-    if (S.filtro.tipo !== 'gruppo' && m.gruppo) s.push(h('span', { class: 'segno gruppo' }, m.gruppo));
-    return s;
+    const l = L.segnaliMail(m).map((k) => SEGNALI[k]());
+    if (m.risposta_data && l.length < 2) l.push(h('span', { class: 'segno tenue' }, icona('spunta'), 'risposta data'));
+    return l;
   }
 
   function renderElenco() {
     if (!S.dom.elenco || !S.dom.elenco.isConnected) return;
-    S.dom.titoloElenco.textContent = titoloFiltro() + (S.cerca ? ' · "' + S.cerca + '"' : '');
+    const filtrato = S.filtro.tipo !== 'tutte' && S.filtro.tipo !== 'gruppo';
+    S.dom.titoloElenco.textContent = (filtrato ? 'Tutta la posta' : titoloFiltro()) + (S.cerca ? ' · "' + S.cerca + '"' : '');
+    // Con un filtro attivo, sopra l'elenco: "Da rispondere · togli filtro" (docs/aspetto.md, §2).
+    svuota(S.dom.filtroAttivo, filtrato ? [h('strong', null, titoloFiltro()), ' · ',
+      h('button', { type: 'button', class: 'pulsante testo piccolo', onclick: () => scegliFiltro({ tipo: 'tutte' }) }, 'togli filtro')] : null);
     const n = S.selezione.size;
     S.dom.infoSelezione.textContent = n > 1
       ? n + ' mail selezionate: trascinale su un gruppo o premi il suo numero (1-9).'
@@ -764,15 +816,22 @@
       return;
     }
     if (S.elenco.mail.length === 0) {
-      svuota(S.dom.elenco, h('li', { class: 'vuoto' }, S.cerca ? 'Nessuna mail trovata con questa ricerca.' : 'Qui non c\'è nessuna mail.'));
+      svuota(S.dom.elenco, h('li', { class: 'vuoto' }, S.cerca ? 'Nessuna mail trovata con questa ricerca.' : 'Nessuna mail qui.'));
       return;
     }
+    const nuove = S.elenco.nuove || new Set();
+    S.elenco.nuove = null;
     const righe = S.elenco.mail.map((m) => {
       const sel = S.selezione.has(m.id);
+      const g = gruppoDi(m);
+      const colore = classeColore(g);
+      const chiavi = L.segnaliMail(m);
       const li = h('li', {
-        class: 'mail' + (m.letta ? '' : ' non-letta') + (sel ? ' selezionata' : '') + (S.attiva === m.id ? ' attiva' : ''),
+        class: 'mail' + (m.letta ? '' : ' non-letta') + (sel ? ' selezionata' : '') + (S.attiva === m.id ? ' attiva' : '') + (nuove.has(m.id) ? ' entrata' : ''),
         role: 'option',
         'aria-selected': sel ? 'true' : 'false',
+        // Il lettore schermo legge prima i segnali importanti, poi chi scrive e l'oggetto.
+        'aria-label': chiavi.map((k) => PAROLE_SEGNALI[k]).concat(m.letta ? [] : ['non letta'], [nomeMittente(m), m.oggetto || '(senza oggetto)'], m.risposta_data ? ['risposta data'] : []).join(', '),
         draggable: 'true',
         onclick: (e) => suClicMail(e, m.id),
         ondragstart: (e) => {
@@ -785,12 +844,17 @@
           setTimeout(() => etichetta.remove(), 0);
         },
       },
-        h('div', { class: 'riga-1' },
-          h('span', { class: 'mittente' }, nomeMittente(m)),
-          h('span', { class: 'ora' }, L.oraBreve(m.ricevuta_il))),
-        h('div', { class: 'oggetto' }, m.oggetto || '(senza oggetto)'),
-        h('div', { class: 'riassunto-breve' }, m.riassunto || m.anteprima || ''),
-        h('div', { class: 'segni' }, segni(m)));
+        h('span', { class: 'avatar ' + colore, 'aria-hidden': 'true' }, L.iniziali(m.mittente && m.mittente.nome, m.mittente && m.mittente.indirizzo)),
+        h('div', { class: 'contenuto-mail' },
+          h('div', { class: 'riga-1' },
+            h('span', { class: 'mittente' }, nomeMittente(m)),
+            h('span', { class: 'ora' }, L.oraBreve(m.ricevuta_il))),
+          h('div', { class: 'oggetto' }, m.oggetto || '(senza oggetto)'),
+          h('div', { class: 'riassunto-breve' }, m.riassunto || m.anteprima || ''),
+          h('div', { class: 'riga-segni-elenco' },
+            h('span', { class: 'segni' }, segni(m)),
+            m.pec ? h('span', { class: 'tipo-pec', title: 'PEC arrivata da ' + (m.pec.mittente_busta || '') }, 'PEC') : null,
+            S.filtro.tipo !== 'gruppo' && m.gruppo ? h('span', { class: 'gruppo-etichetta ' + colore }, m.gruppo) : null)));
       li.dataset.id = String(m.id);
       return li;
     });
@@ -949,6 +1013,19 @@
    */
   async function dopoSmistamento(ids, foto) {
     if (S.vista !== 'posta') return;
+    // La riga che esce dalla vista scivola via (docs/aspetto.md, §5); intanto nessun'altra azione parte.
+    const escono = ids.filter((id) => !restaNelFiltro(mailInElenco(id)));
+    if (escono.length && conMovimenti() && S.dom.elenco && !S.occupato) {
+      let mosse = 0;
+      for (const id of escono) {
+        const li = S.dom.elenco.querySelector('li.mail[data-id="' + id + '"]');
+        if (li) { li.classList.add('uscita'); mosse++; }
+      }
+      if (mosse) {
+        S.occupato = 'movimento';
+        try { await new Promise((r) => setTimeout(r, 180)); } finally { S.occupato = null; }
+      }
+    }
     const ordinePrima = ordine();
     S.elenco.mail = S.elenco.mail.filter((m) => !ids.includes(m.id) || restaNelFiltro(m));
     const restanti = new Set(S.elenco.mail.map((m) => m.id));
@@ -1063,6 +1140,11 @@
     if (inCampo) S.tastoInCampo = { el: b, t: Date.now() };
     if (S.velo) {
       if (e.key === 'Escape') { e.preventDefault(); S.velo.chiudi(); }
+      return;
+    }
+    if (e.key === 'Escape' && ((S.dom.menuAzioni && !S.dom.menuAzioni.hidden) || (S.dom.spostaInElenco && !S.dom.spostaInElenco.hidden))) {
+      e.preventDefault();
+      chiudiFinestrelleMail();
       return;
     }
     if (e.key === 'F5') {
@@ -1182,105 +1264,214 @@
 
   function renderLettura() {
     if (!S.dom.lettura || !S.dom.lettura.isConnected) return;
+    S.dom.barraRisposta = null;
     if (S.selezione.size > 1) {
       chiudiEditorPosta();
       return renderSelezioneMultipla();
     }
     if (!S.aperta) {
       chiudiEditorPosta();
-      svuota(S.dom.lettura, h('div', { class: 'vuoto-lettura' },
+      svuota(S.dom.lettura, h('div', { class: 'lettura-scorre' }, h('div', { class: 'vuoto-lettura' },
         h('p', { class: 'grande' }, 'Scegli una mail dall\'elenco.'),
         h('p', null, 'Con le frecce scorri, con i numeri da 1 a 9 la sposti in un gruppo, con Invio dici "va bene così".'),
-        h('button', { type: 'button', class: 'pulsante testo', onclick: mostraAiuto }, 'Tutte le scorciatoie (?)')));
+        h('button', { type: 'button', class: 'pulsante testo', onclick: mostraAiuto }, 'Tutte le scorciatoie (?)'))));
       return;
     }
     if (S.aperta.caricando) {
-      svuota(S.dom.lettura, h('p', { class: 'vuoto-lettura' }, 'Apro la mail…'));
+      svuota(S.dom.lettura, h('div', { class: 'lettura-scorre' }, h('p', { class: 'vuoto-lettura' }, 'Apro la mail…')));
       return;
     }
     if (S.aperta.errore) {
-      svuota(S.dom.lettura, h('div', { class: 'vuoto-lettura' }, messaggioInLinea(S.aperta.errore)));
+      svuota(S.dom.lettura, h('div', { class: 'lettura-scorre' }, h('div', { class: 'vuoto-lettura' }, messaggioInLinea(S.aperta.errore))));
       return;
     }
     const m = S.aperta.mail;
     S.dom.testata = h('article', { class: 'mail-aperta' });
     S.dom.bozza = h('section', { class: 'sezione-bozza', 'aria-label': 'Risposta' });
-    svuota(S.dom.lettura, S.dom.testata, S.dom.bozza);
+    // La barra fissa in basso alla colonna: [Rifai] [Invia →] e le sue varianti (docs/aspetto.md, §3).
+    S.dom.barraRisposta = h('div', { class: 'barra-risposta azioni-bozza', role: 'toolbar', 'aria-label': 'Risposta' });
+    svuota(S.dom.lettura, h('div', { class: 'lettura-scorre' }, S.dom.testata, S.dom.bozza), S.dom.barraRisposta);
     aggiornaTestata();
     if (S.editor && S.editor.mailId === m.id && !S.editor.distrutto) {
-      S.editor.spostaIn(S.dom.bozza);
+      S.editor.spostaIn(S.dom.bozza, S.dom.barraRisposta);
     } else {
       chiudiEditorPosta();
-      S.editor = creaEditor({ contenitore: S.dom.bozza, prefisso: 'bozza', mailId: m.id, suCambio: suCambioBozzaPosta });
+      S.editor = creaEditor({
+        contenitore: S.dom.bozza,
+        barra: S.dom.barraRisposta,
+        prefisso: 'bozza',
+        mailId: m.id,
+        mail: () => (S.aperta && S.aperta.mail && S.aperta.mail.id === m.id ? S.aperta.mail : null),
+        suCambio: suCambioBozzaPosta,
+      });
       if (m.bozza && m.bozza.id) S.editor.carica(m.bozza.id);
       else S.editor.render();
     }
   }
 
-  /** Solo la parte alta della mail aperta (intestazioni, gruppo, testo): il riquadro della bozza non si tocca. */
+  /** Chiude le finestrelle della mail aperta (menu ⋮, "Sposta in") se si clicca fuori o si preme Esc. */
+  function chiudiFinestrelleMail() {
+    for (const el of [S.dom.menuAzioni, S.dom.spostaInElenco]) {
+      if (el && !el.hidden) {
+        el.hidden = true;
+        const pulsante = el.previousElementSibling;
+        if (pulsante) pulsante.setAttribute('aria-expanded', 'false');
+      }
+    }
+  }
+
+  function apriFinestrella(el, pulsante) {
+    const aperta = !el.hidden;
+    chiudiFinestrelleMail();
+    if (aperta) return;
+    el.hidden = false;
+    pulsante.setAttribute('aria-expanded', 'true');
+    const primo = el.querySelector('button');
+    if (primo) primo.focus();
+  }
+
+  /** Nei menu della mail aperta le frecce scorrono le voci (e non l'elenco delle mail), Esc chiude. */
+  function tastiMenu(e, elenco, pulsante) {
+    const voci = Array.from(elenco.querySelectorAll('button'));
+    const i = voci.indexOf(document.activeElement);
+    let prossima = null;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      chiudiFinestrelleMail();
+      pulsante.focus();
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'j') prossima = voci[(i + 1) % voci.length];
+    else if (e.key === 'ArrowUp' || e.key === 'k') prossima = voci[(i - 1 + voci.length) % voci.length];
+    else if (e.key === 'Home') prossima = voci[0];
+    else if (e.key === 'End') prossima = voci[voci.length - 1];
+    else if (e.key === 'Tab') { chiudiFinestrelleMail(); return; }
+    if (!prossima) return;
+    e.preventDefault();
+    e.stopPropagation();
+    prossima.focus();
+  }
+
+  /** La mail aperta com'è adesso (i menu si riempiono quando si aprono, non quando si disegna l'intestazione). */
+  function mailAdesso(m) {
+    return S.aperta && S.aperta.mail && S.aperta.mail.id === m.id ? S.aperta.mail : m;
+  }
+
+  /** "Sposta in": i gruppi colorati con cerchio, nome e descrizione corta (si apre dal gruppo o da "Cambia"). */
+  function costruisciSpostaIn(m) {
+    const g = gruppoDi(m);
+    let chip = null;
+    const elenco = h('div', { class: 'sposta-in-elenco', role: 'menu', 'aria-label': 'Sposta in', hidden: true,
+      onkeydown: (e) => tastiMenu(e, elenco, chip) });
+    const riempi = () => {
+      const mm = mailAdesso(m);
+      svuota(elenco,
+        h('p', { class: 'titolo-menu', 'aria-hidden': 'true' }, 'Sposta in'),
+        S.gruppi.map((x, i) => h('button', {
+          type: 'button', role: 'menuitem',
+          class: 'voce-menu voce-gruppo ' + classeColore(x) + (x.id === mm.gruppo_id ? ' attuale' : ''),
+          'data-gruppo': String(x.id),
+          'aria-current': x.id === mm.gruppo_id ? 'true' : null,
+          onclick: () => { chiudiFinestrelleMail(); if (x.id !== mm.gruppo_id) sposta([mm.id], x.id); },
+        },
+          h('span', { class: 'avatar piccolo ' + classeColore(x), 'aria-hidden': 'true' }, i < 9 ? String(i + 1) : ''),
+          h('span', { class: 'testi' },
+            h('span', { class: 'nome-gruppo' }, x.nome + (x.id === mm.gruppo_id ? ' (adesso è qui)' : '')),
+            x.descrizione ? h('span', { class: 'descrizione-gruppo' }, x.descrizione) : null))));
+    };
+    const apri = () => { riempi(); apriFinestrella(elenco, chip); };
+    const origine = { regola: 'messa qui da una regola', decisore: 'messa qui da Sol', utente: 'messa qui da te' }[m.origine_smistamento];
+    chip = h('button', {
+      type: 'button', class: 'chip-gruppo ' + classeColore(g), 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+      title: (origine ? origine[0].toUpperCase() + origine.slice(1) + '. ' : '') + 'Clic per spostarla in un altro gruppo.',
+      onclick: (e) => { e.stopPropagation(); apri(); },
+    }, (m.gruppo || (g && g.nome) || 'Senza gruppo'), icona('giu'));
+    S.dom.spostaInElenco = elenco;
+    return { ancora: h('span', { class: 'ancora-menu' }, chip, elenco), chip, elenco, apri };
+  }
+
+  /** Il menu ⋮ con le azioni rare (docs/aspetto.md, §3). */
+  function costruisciMenuAzioni(m) {
+    let pulsante = null;
+    const voce = (testo, azione, classe) => h('button', { type: 'button', role: 'menuitem', class: 'voce-menu' + (classe ? ' ' + classe : ''),
+      onclick: () => { chiudiFinestrelleMail(); azione(); } }, testo);
+    const elenco = h('div', { class: 'menu-azioni', role: 'menu', 'aria-label': 'Altre azioni', hidden: true,
+      onkeydown: (e) => tastiMenu(e, elenco, pulsante) });
+    const riempi = () => {
+      const mm = mailAdesso(m);
+      const ed = S.editor && !S.editor.distrutto && S.editor.mailId === mm.id ? S.editor : null;
+      svuota(elenco,
+        voce(mm.letta ? 'Segna come da leggere' : 'Segna come letta', () => cambiaLetta([mm.id])),
+        voce(mm.da_rispondere ? 'Non serve rispondere' : 'Va risposta', () => cambiaRispondere([mm.id])),
+        mm.sospetta ? null : voce('Segnala come possibile truffa', () => cambiaSospetta(mm.id, true), 'discreto'),
+        ed && ed.dati && ['pronta', 'errore'].includes(ed.dati.stato) && (ed.dati.testo || '').trim() ? voce('Scarta la risposta', async () => {
+          const si = await chiediConferma({ titolo: 'Scartare la risposta?', testo: 'Sol la toglie; se serve, potrai fargliene preparare un\'altra.', si: 'Sì, scarta', pericolo: true });
+          if (si) ed.scarta();
+        }, 'pericolo') : null);
+    };
+    pulsante = h('button', {
+      type: 'button', class: 'pulsante testo pulsante-menu', 'aria-label': 'Altre azioni', title: 'Altre azioni',
+      'aria-haspopup': 'menu', 'aria-expanded': 'false',
+      onclick: (e) => { e.stopPropagation(); riempi(); apriFinestrella(elenco, pulsante); },
+    }, icona('punti'));
+    S.dom.menuAzioni = elenco;
+    return { ancora: h('span', { class: 'ancora-menu' }, pulsante, elenco), pulsante, elenco };
+  }
+
+  /** La parte alta della mail aperta: il riquadro della risposta e la barra in basso non si toccano. */
   function aggiornaTestata() {
     if (!S.dom.testata || !S.dom.testata.isConnected || !S.aperta || !S.aperta.mail) return;
     const m = S.aperta.mail;
-    const scelta = h('select', { 'aria-label': 'Gruppo in cui spostarla' },
-      h('option', { value: '' }, 'Sposta in…'), S.gruppi.filter((g) => g.id !== m.gruppo_id).map((g) => h('option', { value: String(g.id) }, g.nome)));
-    // La tendina non sposta da sola (con le frecce cambierebbe a ogni passo): serve il pulsante (§ revisione 11).
-    const spostaQui = h('span', { class: 'sposta-in' }, scelta,
-      h('button', { type: 'button', class: 'pulsante secondario piccolo', onclick: () => { const v = Number(scelta.value); if (v) sposta([m.id], v); else scelta.focus(); } }, 'Sposta'));
-
-    let smistamento;
-    if (m.smistamento === 'da_controllare') {
-      const sic = m.sicurezza != null ? ' (sicura al ' + Math.round(m.sicurezza * 100) + '%)' : '';
-      smistamento = h('div', { class: 'riquadro controllare' },
-        h('p', null, 'Sol pensa che vada in ', h('strong', null, m.gruppo || 'Altro'), sic + ', ma non ne è certa. È giusto?'),
-        m.sospetta ? h('p', { class: 'aiuto' }, '"Va bene così" accetta solo il gruppo: la mail resta segnalata come possibile truffa finché non premi "Non è una truffa".') : null,
-        h('div', { class: 'azioni' },
-          h('button', { type: 'button', class: 'pulsante primario piccolo', onclick: () => vaBene([m.id]) }, 'Va bene così (Invio)'),
-          spostaQui));
-    } else {
-      const origine = { regola: 'per una regola', decisore: 'deciso da Sol', utente: 'spostata da te' }[m.origine_smistamento] || '';
-      smistamento = h('div', { class: 'riga-gruppo' },
-        h('span', { class: 'segno gruppo grande' }, icona('gruppo'), m.gruppo || 'Altro'),
-        origine ? h('span', { class: 'tenue' }, origine) : null,
-        m.smistamento === 'in_attesa' ? h('span', { class: 'tenue' }, 'Sol non l\'ha ancora smistata') : null,
-        (!m.applicata_in_casella && m.smistamento !== 'in_attesa' && S.salute && S.salute.modalita_prova) ? h('span', { class: 'tenue' }, '· modalità prova: nella casella vera è rimasta dov\'era') : null,
-        h('span', { class: 'spazio' }),
-        spostaQui);
-    }
-
+    const g = gruppoDi(m);
+    const colore = classeColore(g);
+    const spostaIn = costruisciSpostaIn(m);
+    const menu = costruisciMenuAzioni(m);
+    // Su una mail già segnalata come possibile truffa l'avviso in cima basta: "non sicura se è una truffa"
+    // sotto lo contraddirebbe.
+    const incerti = Array.isArray(m.incerti) ? m.incerti.filter((x) => !(x === 'truffa' && m.sospetta)).map((x) => ({ urgenza: 'urgenza', da_rispondere: 'se va risposta', gruppo: 'gruppo', truffa: 'se è una possibile truffa' }[x] || null)).filter(Boolean) : [];
     const allegati = (m.allegati || []).length
-      ? h('ul', { class: 'allegati' }, m.allegati.map((a) => h('li', null, icona('allegato'), a.nome + (a.byte ? ' · ' + dimensione(a.byte) : ''))))
+      ? h('div', { class: 'blocco-allegati' }, h('p', { class: 'etichetta-allegati' }, 'Allegati'),
+        h('ul', { class: 'allegati', 'aria-label': 'Allegati' }, m.allegati.map((a) => h('li', null, icona('allegato'), a.nome + (a.byte ? ' (' + dimensione(a.byte) + ')' : '')))))
       : null;
-
-    const incerti = Array.isArray(m.incerti) ? m.incerti.map((x) => ({ urgenza: 'urgenza', da_rispondere: 'se va risposta', gruppo: 'gruppo', truffa: 'se è una possibile truffa' }[x] || null)).filter(Boolean) : [];
     svuota(S.dom.testata,
-      // §16.3: in cima e ben visibile, col pulsante esplicito per toglierlo.
+      S.aperta.memoria ? h('p', { class: 'in-linea avvertenza' }, 'Copia salvata il ' + L.dataLunga(S.aperta.memoria) + ': il server ora non risponde.') : null,
+      h('header', { class: 'testa-mail' },
+        h('span', { class: 'avatar grande ' + colore, 'aria-hidden': 'true' }, L.iniziali(m.mittente && m.mittente.nome, m.mittente && m.mittente.indirizzo)),
+        h('div', { class: 'chi' },
+          h('div', { class: 'nome' }, nomeMittente(m)),
+          m.mittente && m.mittente.nome && m.mittente.indirizzo ? h('div', { class: 'indirizzo' }, m.mittente.indirizzo) : null,
+          h('div', { class: 'quando' },
+            h('span', null, L.oraIntestazione(m.ricevuta_il)),
+            h('span', { 'aria-hidden': 'true' }, '·'),
+            spostaIn.ancora,
+            m.smistamento === 'in_attesa' ? h('span', { class: 'segno tenue' }, 'non ancora smistata') : null,
+            m.urgenza === 'alta' ? SEGNALI.urgente() : null,
+            m.risposta_data ? h('span', { class: 'segno ok' }, icona('spunta'), 'risposta data') : null)),
+        menu.ancora),
+      // Mail da controllare: una riga compatta sotto l'intestazione; le altre non hanno niente sul gruppo.
+      m.smistamento === 'da_controllare' ? h('div', { class: 'riga-controllo' },
+        h('span', { class: 'domanda' }, icona('interrogativo'), 'È nel gruppo giusto?'),
+        h('button', { type: 'button', class: 'pulsante secondario piccolo', title: 'Va bene così (Invio)', onclick: () => vaBene([m.id]) }, 'Sì'),
+        h('button', { type: 'button', class: 'pulsante secondario piccolo', onclick: (e) => { e.stopPropagation(); spostaIn.apri(); } }, 'Cambia'),
+        m.sospetta ? h('p', { class: 'aiuto' }, '"Sì" (o Invio) accetta solo il gruppo: la mail resta segnalata come possibile truffa finché non premi "Non è una truffa".') : null) : null,
+      h('h1', { class: 'oggetto-grande' }, m.oggetto || '(senza oggetto)'),
+      // §16.3: l'avviso truffa, sopra "In breve", col pulsante esplicito per toglierlo.
       m.sospetta ? h('div', { class: 'riquadro truffa', role: 'alert' },
         h('p', { class: 'testo-truffa' }, AVVISO_TRUFFA),
         h('div', { class: 'azioni' },
           h('button', { type: 'button', class: 'pulsante secondario piccolo', onclick: () => cambiaSospetta(m.id, false) }, 'Non è una truffa'))) : null,
-      S.aperta.memoria ? h('p', { class: 'in-linea avvertenza' }, 'Copia salvata il ' + L.dataLunga(S.aperta.memoria) + ': il server ora non risponde.') : null,
-      h('h1', { class: 'oggetto-grande' }, m.oggetto || '(senza oggetto)'),
+      m.riassunto ? h('p', { class: 'riassunto-mail ' + colore }, h('span', { class: 'etichetta-riassunto' }, 'In breve'), m.riassunto) : null,
+      // Chi scrive è già nell'intestazione: qui solo quello che serve in più (busta PEC, destinatari, casella).
       h('dl', { class: 'intestazioni' },
-        h('dt', null, 'Da'), h('dd', null, persona(m.mittente)),
         // Una PEC ha due mittenti: chi ha scritto e la casella certificata che l'ha spedita (§15.8).
         m.pec ? [h('dt', null, 'Busta PEC'), h('dd', null, (m.pec.mittente_busta || '') + (m.pec.gestore ? ' (gestore ' + m.pec.gestore + ')' : ''))] : null,
         (m.destinatari || []).length ? [h('dt', null, 'A'), h('dd', null, elencoPersone(m.destinatari))] : null,
         (m.cc || []).length ? [h('dt', null, 'Cc'), h('dd', null, elencoPersone(m.cc))] : null,
-        h('dt', null, 'Quando'), h('dd', null, L.dataLunga(m.ricevuta_il) + (m.casella ? ' · arrivata in ' + m.casella : ''))),
-      smistamento,
-      h('div', { class: 'riga-segni' },
-        m.urgenza === 'alta' ? h('span', { class: 'segno urgente' }, 'Urgente') : null,
-        m.urgenza === 'bassa' ? h('span', { class: 'segno tenue' }, 'Poco importante') : null,
-        m.risposta_data ? h('span', { class: 'segno tenue' }, 'Risposta già data') : null,
-        h('button', { type: 'button', class: 'pulsante testo piccolo', onclick: () => cambiaRispondere([m.id]) },
-          m.da_rispondere ? 'Non serve rispondere (D)' : 'Segna da rispondere (D)'),
-        h('button', { type: 'button', class: 'pulsante testo piccolo', onclick: () => cambiaLetta([m.id]) }, m.letta ? 'Segna da leggere (L)' : 'Segna letta (L)'),
-        // Sulle mail non segnalate, un'azione meno in vista (§16.3).
-        m.sospetta ? null : h('button', { type: 'button', class: 'pulsante testo piccolo discreto', onclick: () => cambiaSospetta(m.id, true) }, 'Segnala come possibile truffa')),
+        m.casella ? [h('dt', null, 'Arrivata in'), h('dd', null, m.casella + ((!m.applicata_in_casella && m.smistamento !== 'in_attesa' && S.salute && S.salute.modalita_prova) ? ' (prova: nella casella vera è rimasta dov\'era)' : ''))] : null),
       incerti.length ? h('p', { class: 'tenue piccolo' }, 'Sol non è del tutto sicura di: ' + incerti.join(', ') + '.') : null,
-      m.riassunto ? h('p', { class: 'riassunto-mail' }, h('span', { class: 'etichetta-riassunto' }, 'In breve'), m.riassunto) : null,
-      allegati,
-      h('div', { class: 'corpo-mail' }, m.corpo || m.anteprima || ''));
+      h('div', { class: 'corpo-mail' }, m.corpo || m.anteprima || ''),
+      allegati);
   }
 
   function suCambioBozzaPosta(ed, evento) {
@@ -1290,19 +1481,23 @@
     if (evento === 'inviata') cambio.risposta_data = true;
     aggiornaInElenco(cambio);
     renderElenco();
-    if (evento === 'inviata') aggiornaContatori();
+    if (evento === 'inviata') {
+      // Partita la risposta, l'intestazione dice "risposta data" (il riquadro della risposta non si tocca).
+      if (S.aperta && S.aperta.id === ed.mailId && !(S.dom.testata && S.dom.testata.contains(document.activeElement))) aggiornaTestata();
+      aggiornaContatori();
+    }
   }
 
   function renderSelezioneMultipla() {
     const ids = [...S.selezione];
-    svuota(S.dom.lettura, h('div', { class: 'selezione-multipla' },
+    svuota(S.dom.lettura, h('div', { class: 'lettura-scorre' }, h('div', { class: 'selezione-multipla' },
       h('p', { class: 'grande' }, ids.length + ' mail selezionate'),
       h('p', null, 'Trascinale su un gruppo a sinistra, premi il numero del gruppo, oppure scegli qui. Spostando più mail insieme Sol non impara i mittenti' + (ids.length > MAX_SENZA_CONFERMA ? ', e prima chiede conferma.' : '.')),
-      h('div', { class: 'griglia-gruppi' }, S.gruppi.map((g, i) => h('button', { type: 'button', class: 'pulsante secondario', onclick: () => sposta(ids, g.id) },
-        i < 9 ? h('kbd', null, String(i + 1)) : null, ' ' + g.nome))),
+      h('div', { class: 'griglia-gruppi' }, S.gruppi.map((g, i) => h('button', { type: 'button', class: 'pulsante secondario ' + classeColore(g), onclick: () => sposta(ids, g.id) },
+        h('span', { class: 'pallino', 'aria-hidden': 'true' }), i < 9 ? h('kbd', null, String(i + 1)) : null, ' ' + g.nome))),
       h('div', { class: 'azioni' },
         h('button', { type: 'button', class: 'pulsante primario', onclick: () => vaBene(ids) }, 'Vanno bene così (Invio)'),
-        h('button', { type: 'button', class: 'pulsante secondario', onclick: () => cambiaLetta(ids) }, 'Segna lette o da leggere (L)'))));
+        h('button', { type: 'button', class: 'pulsante secondario', onclick: () => cambiaLetta(ids) }, 'Segna lette o da leggere (L)')))));
   }
 
   function dimensione(byte) {
@@ -1349,8 +1544,9 @@
       caricando: false, preparando: false, invio: false,
       messaggio: null, tipoMessaggio: 'errore', campoErrato: null, messaggioDaSalvataggio: false,
       rifaiAperto: false, chiediDaZero: false, nonSalvata: null,
-      distrutto: false, poll: null, contenitore: o.contenitore, prefisso: o.prefisso, el: {},
+      distrutto: false, poll: null, contenitore: o.contenitore, barra: o.barra || null, prefisso: o.prefisso, el: {},
     };
+    const mailDi = () => (o.mail ? o.mail() : null);
     const suCambio = (evento) => { if (o.suCambio) o.suCambio(ed, evento); };
     const idCampo = (nome) => ed.prefisso + '-' + nome;
 
@@ -1360,8 +1556,9 @@
       clearTimeout(ed.poll);
     };
 
-    ed.spostaIn = (contenitore) => {
+    ed.spostaIn = (contenitore, barra) => {
       ed.contenitore = contenitore;
+      if (barra !== undefined) ed.barra = barra;
       render();
     };
 
@@ -1645,14 +1842,20 @@
       for (const k of ['a', 'cc', 'oggetto', 'testo']) if (ed.el[k]) ed.el[k].classList.remove('campo-errato');
     }
 
+    /** La scritta del pulsante d'invio: nella barra in basso "Invia →", nei solleciti "Invia…". */
+    function etichettaInvio() {
+      if (ed.invio) return 'In attesa della conferma…';
+      const errore = ed.dati && ed.dati.stato === 'errore';
+      if (ed.barra) return errore ? 'Riprova a inviare' : 'Invia';
+      return errore ? 'Riprova a inviare…' : 'Invia…';
+    }
+
     /** Blocca o sblocca i campi senza ridisegnare (il fuoco e il punto in cui si scriveva restano). */
     function aggiornaBlocco() {
       const b = ed.invio;
       for (const k of ['a', 'cc', 'oggetto', 'testo']) if (ed.el[k]) ed.el[k].readOnly = b;
       for (const k of ['invia', 'rifai']) if (ed.el[k]) ed.el[k].disabled = b;
-      if (ed.el.etichettaInvia) {
-        ed.el.etichettaInvia.textContent = b ? 'In attesa della conferma…' : (ed.dati && ed.dati.stato === 'errore' ? 'Riprova a inviare…' : 'Invia…');
-      }
+      if (ed.el.etichettaInvia) ed.el.etichettaInvia.textContent = etichettaInvio();
     }
 
     function disegnaBanner() {
@@ -1697,13 +1900,57 @@
       ed.el = {};
       ed.el.banner = h('div', { class: 'spazio-banner' });
       svuota(ed.contenitore, ed.el.banner, contenuto());
+      if (ed.barra) svuota(ed.barra, azioniBarra());
       disegnaBanner();
     }
 
+    function titolo() {
+      return ed.inviata || (ed.dati && ed.dati.tipo === 'sollecito') ? 'Sollecito' : 'Risposta';
+    }
+
+    /** Nella mail aperta: si propone di preparare la risposta solo se va risposta e non è una possibile truffa. */
+    function proponiRisposta() {
+      const m = mailDi();
+      return !!m && !!m.da_rispondere && !m.risposta_data && !m.sospetta;
+    }
+
+    /** I pulsanti della barra in basso (docs/aspetto.md, §3), secondo lo stato della risposta. */
+    function azioniBarra() {
+      if (ed.caricando) return [];
+      const preparazione = () => [h('span', { class: 'attesa', role: 'status' }, h('span', { class: 'indicatore', 'aria-hidden': 'true' }), 'Sol sta scrivendo la risposta…')];
+      // Un pulsante solo sta a destra, dove poi comparirà "Invia".
+      const aDestra = (pulsante) => [h('span', { class: 'spazio' }), pulsante];
+      if (ed.preparando) return preparazione();
+      if (!ed.dati) {
+        if (ed.id) return [];
+        if (proponiRisposta()) return aDestra(h('button', { type: 'button', class: 'pulsante primario', title: 'Prepara la risposta (R)', onclick: () => ed.prepara(null) }, icona('rispondi'), 'Prepara la risposta'));
+        // Mail che non chiede risposta: la si può preparare lo stesso, senza metterla in vista.
+        // Una possibile truffa senza risposta chiesta: nessuna barra (il pulsante "Non è una truffa" è nell'avviso).
+        const m = mailDi();
+        return m && !m.sospetta ? aDestra(h('button', { type: 'button', class: 'pulsante testo', title: 'Prepara una risposta (R)', onclick: () => ed.prepara(null) }, icona('rispondi'), 'Rispondi')) : [];
+      }
+      const d = ed.dati;
+      if (d.stato === 'in_preparazione') return preparazione();
+      if (d.stato === 'inviata') return [];
+      if (d.stato === 'scartata') return aDestra(h('button', { type: 'button', class: 'pulsante secondario', onclick: () => ed.prepara(null) }, 'Prepara una nuova risposta'));
+      if (d.stato === 'errore' && !(d.testo || '').trim()) return aDestra(h('button', { type: 'button', class: 'pulsante primario', onclick: () => ed.rifai(null) }, 'Riprova a preparare'));
+      ed.el.etichettaInvia = h('span', null, etichettaInvio());
+      ed.el.invia = h('button', { type: 'button', class: 'pulsante primario', disabled: ed.invio ? true : null, onclick: () => ed.invia() }, ed.el.etichettaInvia, icona('freccia'));
+      ed.el.rifai = h('button', { type: 'button', class: 'pulsante secondario', title: 'Rifai con istruzioni', disabled: ed.invio ? true : null, onclick: () => {
+        ed.rifaiAperto = true;
+        render();
+        const t = document.getElementById(idCampo('istruzioni'));
+        if (t) t.focus();
+      } }, 'Rifai');
+      return [ed.el.rifai, h('span', { class: 'spazio' }), ed.el.invia];
+    }
+
     function contenuto() {
-      const titolo = ed.inviata || (ed.dati && ed.dati.tipo === 'sollecito') ? 'Sollecito' : 'Risposta';
+      const nellaMail = !!ed.barra;
       if (ed.caricando) return h('p', { class: 'attesa' }, 'Carico la bozza…');
-      if (ed.preparando) return h('div', { class: 'pannello-bozza in-preparazione' }, h('h2', null, titolo), h('p', { class: 'attesa' }, 'Chiedo a Sol di preparare la bozza…'));
+      if (ed.preparando) {
+        return nellaMail ? null : h('div', { class: 'pannello-bozza in-preparazione' }, h('h2', null, titolo()), h('p', { class: 'attesa' }, 'Chiedo a Sol di preparare la bozza…'));
+      }
       if (!ed.dati) {
         if (ed.id) {
           return h('div', null, messaggioInLinea(ed.messaggio || 'La bozza non si è caricata.'),
@@ -1713,6 +1960,11 @@
           return h('div', null, messaggioInLinea(ed.messaggio),
             h('button', { type: 'button', class: 'pulsante secondario', onclick: () => ed.prepara(null) }, 'Prepara il sollecito'));
         }
+        if (nellaMail) {
+          // Il pulsante "Prepara la risposta" è nella barra in basso; qui solo le istruzioni, se serve rispondere.
+          return h('div', null, messaggioInLinea(ed.messaggio),
+            proponiRisposta() ? campoIstruzioni('Oppure di\' a Sol cosa rispondere, per esempio: digli che giovedì alle 10 va bene', false, (t) => ed.prepara(t)) : null);
+        }
         return h('div', { class: 'bozza-assente' },
           messaggioInLinea(ed.messaggio),
           h('button', { type: 'button', class: 'pulsante primario', onclick: () => ed.prepara(null) }, icona('rispondi'), 'Prepara una risposta (R)'),
@@ -1720,13 +1972,14 @@
       }
       const d = ed.dati;
       if (d.stato === 'in_preparazione') {
-        return h('div', { class: 'pannello-bozza in-preparazione' },
-          h('h2', null, titolo),
+        return nellaMail ? null : h('div', { class: 'pannello-bozza in-preparazione' },
+          h('h2', null, titolo()),
           h('p', { class: 'attesa' }, 'Sol sta scrivendo la bozza… di solito ci vuole meno di un minuto.'));
       }
       if (d.stato === 'inviata') {
+        // Dopo l'invio la risposta si chiude con un segno di spunta (docs/aspetto.md, §5).
         return h('div', { class: 'pannello-bozza inviata' },
-          h('h2', null, titolo + ' inviata'),
+          h('h2', null, h('span', { class: 'segno-spunta', 'aria-hidden': 'true' }, icona('spunta')), titolo() + ' inviata'),
           messaggioInLinea(ed.messaggio, ed.tipoMessaggio),
           h('p', { class: 'tenue' }, (d.inviata_il ? 'Partita ' + L.dataLunga(d.inviata_il) : 'Partita') + ' verso ' + (d.a || []).join(', ') + '.'),
           h('div', { class: 'corpo-mail piccolo' }, d.testo || ''));
@@ -1734,18 +1987,18 @@
       if (d.stato === 'scartata') {
         return h('div', { class: 'pannello-bozza scartata' },
           h('p', { class: 'tenue' }, 'Bozza scartata.'),
-          h('button', { type: 'button', class: 'pulsante secondario', onclick: () => ed.prepara(null) }, ed.inviata ? 'Prepara di nuovo il sollecito' : 'Prepara una nuova risposta'),
+          nellaMail ? null : h('button', { type: 'button', class: 'pulsante secondario', onclick: () => ed.prepara(null) }, ed.inviata ? 'Prepara di nuovo il sollecito' : 'Prepara una nuova risposta'),
           ed.inviata ? null : campoIstruzioni('Di\' a Sol cosa rispondere', false, (t) => ed.prepara(t)));
       }
       if (d.stato === 'errore' && !(d.testo || '').trim()) {
         // È fallita la scrittura della bozza, non l'invio: si può solo riprovare a prepararla.
         return h('div', { class: 'pannello-bozza in-preparazione' },
-          h('h2', null, titolo),
+          h('h2', null, titolo()),
           messaggioInLinea(ed.messaggio || d.errore || 'Sol non è riuscito a scrivere la bozza.'),
-          h('button', { type: 'button', class: 'pulsante secondario', onclick: () => ed.rifai(null) }, 'Riprova a preparare'));
+          nellaMail ? null : h('button', { type: 'button', class: 'pulsante secondario', onclick: () => ed.rifai(null) }, 'Riprova a preparare'));
       }
 
-      // pronta o errore d'invio: modificabile e (re)inviabile
+      // pronta o errore d'invio: si scrive direttamente qui, e si (re)invia
       const c = ed.campi;
       const campo = (chiave, etichetta) => {
         const input = h('input', {
@@ -1763,19 +2016,31 @@
         spellcheck: 'true', value: c.testo, readonly: ed.invio ? true : null, oninput: (e) => modifica('testo', e.target),
       });
       ed.el.testo = testo;
-      ed.el.etichettaInvia = h('span', null, ed.invio ? 'In attesa della conferma…' : (d.stato === 'errore' ? 'Riprova a inviare…' : 'Invia…'));
-      ed.el.invia = h('button', { type: 'button', class: 'pulsante primario', disabled: ed.invio ? true : null, onclick: () => ed.invia() }, icona('invia'), ed.el.etichettaInvia);
-      ed.el.rifai = ed.rifaiAperto ? null : h('button', { type: 'button', class: 'pulsante secondario', disabled: ed.invio ? true : null, onclick: () => {
-        ed.rifaiAperto = true;
-        render();
-        const t = document.getElementById(idCampo('istruzioni'));
-        if (t) t.focus();
-      } }, 'Rifai con istruzioni');
-      const giaRisposto = !ed.inviata && S.aperta && S.aperta.mail && S.aperta.mail.id === ed.mailId && S.aperta.mail.risposta_data;
-      const sospetta = !ed.inviata && S.aperta && S.aperta.mail && S.aperta.mail.id === ed.mailId && S.aperta.mail.sospetta;
-      return h('div', { class: 'pannello-bozza' + (d.stato === 'errore' ? ' con-errore' : '') },
+      const m = mailDi();
+      const giaRisposto = !ed.inviata && m && m.risposta_data;
+      const sospetta = !ed.inviata && m && m.sospetta;
+      const intestazione = nellaMail
+        ? (d.stato === 'errore' ? 'Risposta (l\'invio non è riuscito)' : 'Risposta pronta') + (d.modificata ? ' · ritoccata da te' : '')
+        : titolo() + (d.modificata ? ' (modificata da te)' : '');
+      let azioni = null;
+      if (!nellaMail) {
+        ed.el.etichettaInvia = h('span', null, etichettaInvio());
+        ed.el.invia = h('button', { type: 'button', class: 'pulsante primario', disabled: ed.invio ? true : null, onclick: () => ed.invia() }, icona('invia'), ed.el.etichettaInvia);
+        ed.el.rifai = ed.rifaiAperto ? null : h('button', { type: 'button', class: 'pulsante secondario', disabled: ed.invio ? true : null, onclick: () => {
+          ed.rifaiAperto = true;
+          render();
+          const t = document.getElementById(idCampo('istruzioni'));
+          if (t) t.focus();
+        } }, 'Rifai con istruzioni');
+        azioni = h('div', { class: 'azioni-bozza' },
+          ed.el.invia,
+          ed.el.rifai,
+          h('span', { class: 'spazio' }),
+          conConferma('Scarta', 'Scartare la bozza?', 'Sì, scarta', () => ed.scarta()));
+      }
+      return h('div', { class: 'pannello-bozza' + (nellaMail ? ' diretto' : '') + (d.stato === 'errore' ? ' con-errore' : '') },
         h('div', { class: 'testa-bozza' },
-          h('h2', null, titolo + (d.modificata ? ' (modificata da te)' : '')),
+          h('h2', null, nellaMail ? icona('matita') : null, intestazione),
           ed.el.salvataggio),
         ed.inviata ? h('p', { class: 'tenue' }, 'Per: ' + (ed.inviata.a || []).join(', ') + ' – ' + (ed.inviata.oggetto || '')) : null,
         sospetta ? messaggioInLinea('Stai rispondendo a una mail segnalata come possibile truffa: non mandare soldi, coordinate bancarie, documenti o password senza aver prima telefonato al mittente a un numero che conosci già.', 'truffa') : null,
@@ -1786,11 +2051,7 @@
         campo('oggetto', 'Oggetto'),
         testo,
         ed.rifaiAperto ? campoIstruzioni('Cosa deve cambiare? Per esempio: più breve, e proponi lunedì mattina', true, (t) => ed.rifai(t)) : null,
-        h('div', { class: 'azioni-bozza' },
-          ed.el.invia,
-          ed.el.rifai,
-          h('span', { class: 'spazio' }),
-          conConferma('Scarta', 'Scartare la bozza?', 'Sì, scarta', () => ed.scarta())),
+        azioni,
         h('p', { class: 'aiuto' }, 'Prima di spedire Sol mostra sempre destinatari, oggetto e inizio del testo e chiede conferma.'));
     }
     ed.render = render;
@@ -2362,16 +2623,42 @@
       if (!r1.ok || !r2.ok) avviso((r1.ok ? r2 : r1).errore, 'errore');
       ricarica();
     };
+    // §17: il colore si sceglie tra i 12 del contratto (il server lo salva per nome; le tinte le decide la pagina).
+    const sceltaColore = (g) => {
+      const attuale = L.coloreGruppo(g.colore);
+      const riquadro = h('div', { class: 'scelta-colori', role: 'group', 'aria-label': 'Colore di ' + g.nome, hidden: true },
+        L.COLORI_GRUPPI.map((c) => h('button', {
+          type: 'button', class: 'colore-scelta col-' + c, 'data-colore': c,
+          'aria-pressed': c === attuale ? 'true' : 'false', 'aria-label': NOMI_COLORI[c], title: NOMI_COLORI[c],
+          onclick: async () => {
+            if (c === attuale) { riquadro.hidden = true; return; }
+            const r = await Api.patch('/server/api/gruppi/' + g.id, { colore: c });
+            if (!r.ok) { avviso(r.errore, 'errore'); return; }
+            avviso(g.nome + ': colore ' + NOMI_COLORI[c].toLowerCase() + '.', 'ok');
+            ricarica();
+          },
+        }, c === attuale ? icona('spunta') : null)));
+      const pulsante = h('button', { type: 'button', class: 'pulsante testo piccolo', 'aria-expanded': 'false', onclick: () => {
+        riquadro.hidden = !riquadro.hidden;
+        pulsante.setAttribute('aria-expanded', riquadro.hidden ? 'false' : 'true');
+        if (!riquadro.hidden) { const b = riquadro.querySelector('[aria-pressed="true"]') || riquadro.querySelector('button'); if (b) b.focus(); }
+      } }, 'Colore');
+      return { riquadro, pulsante, attuale };
+    };
     svuota(sez,
       h('h2', null, 'Gruppi'),
       h('p', { class: 'spiega' }, 'Il numero davanti è il tasto per spostare lì le mail selezionate. Le frecce cambiano l\'ordine. Si possono avere da 2 a ' + MAX_GRUPPI + ' gruppi.'),
-      h('p', { class: 'aiuto' }, 'La descrizione dice a Sol che mail vanno in quel gruppo: più è chiara, meglio Sol smista.'),
-      h('ul', { class: 'elenco-schede' }, S.gruppi.map((g, i) => h('li', { class: 'scheda-riga' },
+      h('p', { class: 'aiuto' }, 'La descrizione dice a Sol che mail vanno in quel gruppo: più è chiara, meglio Sol smista. Il colore si vede nell\'elenco delle mail, qui e sul telefono.'),
+      h('ul', { class: 'elenco-schede' }, S.gruppi.map((g, i) => { const col = sceltaColore(g); return h('li', { class: 'scheda-riga con-colore' },
         h('div', { class: 'principale' },
-          h('p', null, i < 9 ? h('kbd', null, String(i + 1)) : null, ' ', h('span', { class: 'forte' }, g.nome),
-            h('span', { class: 'tenue' }, ' · ' + L.quante(g.totale || 0, 'mail', 'mail') + (g.cartella ? ' · nella casella: ' + g.cartella : ''))),
-          h('p', { class: g.descrizione ? null : 'tenue' }, g.descrizione ? 'Ci vanno: ' + g.descrizione : 'Nessuna descrizione: Sol si basa solo sul nome.')),
+          h('p', null, i < 9 ? h('kbd', null, String(i + 1)) : null, ' ',
+            h('span', { class: 'pallino-gruppo col-' + col.attuale, 'aria-hidden': 'true' }),
+            h('span', { class: 'forte' }, g.nome),
+            h('span', { class: 'tenue' }, ' · ' + NOMI_COLORI[col.attuale].toLowerCase() + ' · ' + L.quante(g.totale || 0, 'mail', 'mail') + (g.cartella ? ' · nella casella: ' + g.cartella : ''))),
+          h('p', { class: g.descrizione ? null : 'tenue' }, g.descrizione ? 'Ci vanno: ' + g.descrizione : 'Nessuna descrizione: Sol si basa solo sul nome.'),
+          col.riquadro),
         h('div', { class: 'azioni' },
+          col.pulsante,
           h('button', { type: 'button', class: 'pulsante testo piccolo', onclick: async () => {
             const t = await chiediTesto(sez, 'Che mail vanno in ' + g.nome + '? (una frase)', g.descrizione || '', 200);
             if (t == null) return;
@@ -2392,7 +2679,7 @@
             const r = await Api.elimina('/server/api/gruppi/' + g.id);
             if (!r.ok) avviso(r.errore, 'errore');
             ricarica();
-          }))))),
+          }))); })),
       h('h3', null, 'Gruppo nuovo'),
       h('div', { class: 'riga-campi' },
         h('div', { class: 'campo' }, h('label', { for: 'nuovo-gruppo' }, 'Nome'), nuovo),

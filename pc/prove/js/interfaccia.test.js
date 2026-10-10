@@ -8,6 +8,8 @@ const assert = require('node:assert/strict');
 const B = require('./banco');
 
 const opz = { skip: B.SENZA_JSDOM };
+// Una prova che fallisce non lascia la pagina aperta (i suoi timer terrebbero vivo il processo).
+test.afterEach(() => B.chiudiTutte());
 
 async function conMailEBozza(extraMail, extraBozza) {
   const s = B.server();
@@ -418,16 +420,33 @@ test('10. mentre una risposta aspetta la conferma d\'invio i tasti di smistament
 
 // --- 11. Tendina e date ----------------------------------------------------------------------------
 
-test('11. "Sposta in…" sposta solo col pulsante, non al primo cambio della tendina', opz, async () => {
+test('11. "Sposta in" (il gruppo nell\'intestazione) sposta solo scegliendo un gruppo: aprirlo e scorrerlo non sposta', opz, async () => {
   const s = await conMailEBozza();
   const p = await B.pagina(s);
   await apriPrima(p);
-  const tendina = p.q('.sposta-in select');
-  tendina.value = '3';
-  tendina.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  const chip = p.q('.testa-mail .chip-gruppo');
+  assert.match(chip.textContent, /Clienti/);
+  assert.ok(chip.classList.contains('col-blu'), 'il gruppo col suo colore');
+  chip.click();
+  await p.aspetta(() => !p.q('.sposta-in-elenco').hidden);
+  const voci = p.tutti('.sposta-in-elenco .voce-gruppo');
+  assert.deepEqual(voci.map((v) => v.dataset.gruppo), ['1', '2', '3', '4', '5', '6']);
+  assert.match(voci[0].textContent, /Clienti \(adesso è qui\)/);
+  assert.match(voci[0].textContent, /un cliente chiede o conferma un lavoro/, 'con la descrizione corta');
+  assert.ok(voci[2].classList.contains('col-ambra'), 'ogni gruppo col suo colore');
+  assert.equal(p.d.activeElement, voci[0]);
+  p.tasto('ArrowDown', {}, p.d.activeElement);
+  p.tasto('ArrowDown', {}, p.d.activeElement);
   await B.dorme(60);
-  assert.equal(s.log.filter((x) => x.url.endsWith('/sposta')).length, 0);
-  await p.clicTesto('Sposta', p.q('.sposta-in'));
+  assert.equal(p.d.activeElement, voci[2], 'le frecce scorrono i gruppi');
+  assert.equal(p.q('.mail.attiva').dataset.id, '812', 'e non le mail dell\'elenco');
+  p.tasto('Escape', {}, p.d.activeElement);
+  await B.dorme(40);
+  assert.ok(p.q('.sposta-in-elenco').hidden, 'Esc chiude');
+  assert.equal(s.log.filter((x) => x.url.endsWith('/sposta')).length, 0, 'aprire e scorrere non sposta niente');
+  p.q('.testa-mail .chip-gruppo').click();
+  await p.aspetta(() => !p.q('.sposta-in-elenco').hidden);
+  p.tutti('.sposta-in-elenco .voce-gruppo')[2].click();
   await p.aspetta(() => s.log.some((x) => x.url.endsWith('/sposta')));
   assert.equal(s.log.find((x) => x.url.endsWith('/sposta')).corpo.gruppo_id, 3);
   p.chiudi();
@@ -553,12 +572,12 @@ test('15. F5 tenuto premuto: un solo aggiornamento', opz, async () => {
 
 // --- 18. Rifai -------------------------------------------------------------------------------------
 
-test('18. "Rifai con istruzioni" prima salva le modifiche, poi chiede il rifacimento', opz, async () => {
+test('18. "Rifai" (barra in basso) prima salva le modifiche, poi chiede il rifacimento', opz, async () => {
   const s = await conMailEBozza();
   const p = await B.pagina(s, { tempi: { salva: 100000 } });
   await apriPrima(p);
   p.scrivi(p.q('#bozza-testo'), 'Buongiorno Mario, ho corretto io.');
-  await p.clicTesto('Rifai con istruzioni');
+  await p.clicTesto('Rifai', p.q('.barra-risposta'));
   p.q('#bozza-istruzioni').value = 'più breve';
   await p.clicTesto('Prepara con queste istruzioni');
   await p.aspetta(() => s.log.some((x) => x.url.endsWith('/rifai')));
@@ -613,14 +632,14 @@ test('19. un 422 con "campo" mostra la frase del server ed evidenzia il campo', 
   p.chiudi();
 });
 
-test('19. i contatori dei filtri vengono da /api/conteggi (niente elenchi da 99 mail)', opz, async () => {
+test('19. i numeri di "Da fare" e dei gruppi vengono da /api/conteggi (niente elenchi da 99 mail)', opz, async () => {
   const s = B.server();
   s.mails = [B.mail(1, { urgenza: 'alta', letta: false }), B.mail(2, { smistamento: 'da_controllare' }), B.mail(3, { da_rispondere: true, risposta_data: true })];
   const p = await B.pagina(s);
-  const voce = (t) => p.tutti('.voce').find((v) => v.querySelector('.etichetta').textContent === t);
-  assert.equal(voce('Da rispondere').querySelector('.contatore').textContent, '2', 'la mail già risposta non conta');
-  assert.equal(voce('Urgenti').querySelector('.contatore').textContent, '1');
-  assert.equal(voce('Da controllare').querySelector('.contatore').textContent, '1');
+  const piastrella = (k) => p.q('.da-fare .piastrella[data-filtro="' + k + '"]');
+  assert.equal(piastrella('da-rispondere').querySelector('.numero').textContent, '2', 'la mail già risposta non conta');
+  assert.equal(piastrella('da-controllare').querySelector('.numero').textContent, '1');
+  assert.equal(p.q('.voce.gruppo[data-gruppo="1"] .contatore').textContent, '3', 'da leggere nel gruppo (conteggi.gruppi)');
   assert.ok(!s.log.some((x) => /limite=99/.test(x.url)));
   p.chiudi();
 });
@@ -684,9 +703,10 @@ test('15.8 PEC: si vedono entrambi i mittenti', opz, async () => {
   assert.match(p.righe()[0].textContent, /PEC/);
   p.clic(p.righe()[0]);
   await p.aspetta(() => p.q('.intestazioni'));
-  const testa = p.q('.intestazioni').textContent;
-  assert.match(testa, /Comune di Bassano <urbanistica@comune\.esempio\.it>/);
-  assert.match(testa, /Busta PEC.*posta-certificata@pec\.esempio\.it/);
+  const chi = p.q('.testa-mail .chi').textContent;
+  assert.match(chi, /Comune di Bassano/, 'chi ha scritto, nell\'intestazione');
+  assert.match(chi, /urbanistica@comune\.esempio\.it/);
+  assert.match(p.q('.intestazioni').textContent, /Busta PEC.*posta-certificata@pec\.esempio\.it/, 'e la casella certificata che l\'ha spedita');
   p.chiudi();
 });
 
@@ -704,13 +724,13 @@ test('15.13 su http: riga "collegamento di casa non protetto" e niente password 
   p.chiudi();
 });
 
-test('15.13 risposta già data: niente segno "Bozza pronta"', opz, async () => {
+test('15.13 risposta già data: niente segno "risposta pronta"', opz, async () => {
   const s = B.server();
   s.mails = [B.mail(812, { risposta_data: true })];
   s.bozze[55] = B.bozza(55, { mail_id: 812, modificata: true });
   const p = await B.pagina(s);
-  assert.doesNotMatch(p.righe()[0].textContent, /Bozza pronta/);
-  assert.match(p.righe()[0].textContent, /Risposta data/);
+  assert.doesNotMatch(p.righe()[0].textContent, /risposta pronta/i);
+  assert.match(p.righe()[0].textContent, /risposta data/);
   p.chiudi();
 });
 
@@ -781,13 +801,16 @@ test('16.3 etichetta rossa "Possibile truffa" prima di tutte le altre', opz, asy
   p.chiudi();
 });
 
-test('16.3 mail aperta: avviso in cima col testo del contratto e "Non è una truffa"', opz, async () => {
+test('16.3 mail aperta: avviso in cima (sotto l\'oggetto, sopra "In breve") col testo del contratto e "Non è una truffa"', opz, async () => {
   const s = conTruffa();
   const p = await B.pagina(s);
   p.clic(p.riga(820));
   await p.aspetta(() => p.q('.riquadro.truffa'));
-  const testata = p.q('.mail-aperta');
-  assert.equal(testata.firstElementChild, p.q('.riquadro.truffa'), 'in cima, prima dell\'oggetto');
+  const figli = Array.from(p.q('.mail-aperta').children);
+  const posto = (sel) => figli.indexOf(p.q(sel));
+  assert.equal(posto('.riquadro.truffa'), posto('.oggetto-grande') + 1, 'subito dopo l\'oggetto');
+  assert.ok(posto('.riquadro.truffa') < posto('.riassunto-mail'), 'sopra "In breve"');
+  assert.ok(posto('.riassunto-mail') < posto('.corpo-mail'), 'poi il testo');
   assert.equal(p.q('.testo-truffa').textContent, AVVISO_TRUFFA);
   await p.clicTesto('Non è una truffa');
   await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/820/sospetta'));
@@ -797,12 +820,16 @@ test('16.3 mail aperta: avviso in cima col testo del contratto e "Non è una tru
   p.chiudi();
 });
 
-test('16.3 sulle mail non segnalate: "Segnala come possibile truffa", meno in vista', opz, async () => {
+test('16.3 sulle mail non segnalate: "Segnala come possibile truffa" nel menu ⋮, meno in vista', opz, async () => {
   const s = conTruffa();
   const p = await B.pagina(s);
   p.clic(p.riga(819));
+  await p.aspetta(() => p.q('.testa-mail .pulsante-menu'));
+  assert.equal(p.pulsante('Segnala come possibile truffa'), null, 'non è in vista finché non si apre il menu');
+  p.q('.testa-mail .pulsante-menu').click();
   await p.aspetta(() => p.pulsante('Segnala come possibile truffa'));
   const pulsante = p.pulsante('Segnala come possibile truffa');
+  assert.ok(pulsante.closest('.menu-azioni'));
   assert.ok(pulsante.classList.contains('discreto'));
   assert.ok(!pulsante.classList.contains('primario'));
   await p.clicTesto('Segnala come possibile truffa');
@@ -813,22 +840,23 @@ test('16.3 sulle mail non segnalate: "Segnala come possibile truffa", meno in vi
   p.chiudi();
 });
 
-test('16.3 filtro "Possibili truffe" col numero, solo se ce ne sono', opz, async () => {
+test('16.3 "Possibili truffe" in "Da fare" col numero, solo se ce ne sono; il clic filtra', opz, async () => {
   const s = conTruffa();
   const p = await B.pagina(s);
-  const voce = () => p.tutti('.voce').find((v) => v.querySelector('.etichetta').textContent === 'Possibili truffe');
-  assert.ok(voce(), 'c\'è con una mail sospetta');
-  assert.equal(voce().querySelector('.contatore').textContent, '1');
+  const piastrella = () => p.q('.da-fare .piastrella[data-filtro="truffe"]');
+  assert.ok(piastrella(), 'c\'è con una mail sospetta');
+  assert.equal(piastrella().querySelector('.numero').textContent, '1');
   await p.clicTesto('Possibili truffe');
   await p.aspetta(() => s.log.some((x) => /\/server\/api\/mail\?sospetta=true/.test(x.url)));
-  assert.ok(s.log.some((x) => /\/server\/api\/mail\?sospetta=true/.test(x.url)));
+  await p.aspetta(() => p.righe().length === 1);
   assert.equal(p.righe().length, 1);
+  assert.equal(p.q('.filtro-attivo').textContent, 'Possibili truffe · togli filtro');
   p.chiudi();
 
   const senza = B.server();
   senza.mails = [B.mail(819)];
   const p2 = await B.pagina(senza);
-  assert.ok(!p2.tutti('.voce').some((v) => v.querySelector('.etichetta').textContent === 'Possibili truffe'), 'senza sospette il filtro non c\'è');
+  assert.equal(p2.q('.da-fare .piastrella[data-filtro="truffe"]'), null, 'senza sospette la piastrella non c\'è');
   p2.chiudi();
 });
 
@@ -837,7 +865,7 @@ test('16.3 Invio ("va bene così") su una mail sospetta accetta il gruppo ma NON
   const p = await B.pagina(s);
   p.clic(p.riga(820));
   await p.aspetta(() => p.q('.riquadro.truffa'));
-  assert.match(p.q('.riquadro.controllare').textContent, /resta segnalata/);
+  assert.match(p.q('.riga-controllo').textContent, /resta segnalata/);
   p.q('.elenco-mail').focus();
   p.tasto('Enter', {}, p.q('.elenco-mail'));
   await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/820/conferma'));
@@ -878,4 +906,295 @@ test('16.2 soglia della possibile truffa nelle impostazioni (tra 20% e 90%)', op
   await p.aspetta(() => s.log.some((x) => x.metodo === 'PATCH' && x.url === '/server/api/impostazioni'));
   assert.deepEqual(s.log.find((x) => x.metodo === 'PATCH').corpo, { soglia_truffa: 0.3 });
   p.chiudi();
+});
+
+// --- Aspetto 1.3 (docs/aspetto.md, contratto §17) -------------------------------------------------
+
+test('Da fare: piastrelle coi numeri, nascoste a zero; clic = filtro, "togli filtro" torna a tutte', opz, async () => {
+  const s = B.server();
+  s.mails = [
+    B.mail(901, { da_rispondere: true }), B.mail(902, { da_rispondere: true }),
+    B.mail(903, { da_rispondere: false, smistamento: 'da_controllare' }),
+  ];
+  s.scadenzeProssime = 2;
+  const p = await B.pagina(s);
+  const tessere = p.tutti('.da-fare .piastrella');
+  assert.deepEqual(tessere.map((t) => t.dataset.filtro), ['da-rispondere', 'da-controllare', 'scadenze'], 'le possibili truffe a zero non ci sono');
+  assert.deepEqual(tessere.map((t) => t.querySelector('.numero').textContent), ['2', '1', '2']);
+  assert.deepEqual(tessere.map((t) => t.querySelector('.etichetta').textContent), ['Da rispondere', 'Da controllare', 'Scadenze della settimana']);
+  assert.equal(p.q('.filtro-attivo').textContent, '', 'senza filtro niente riga del filtro');
+  await p.clicTesto('Da rispondere');
+  await p.aspetta(() => s.log.some((x) => /[?&]da_rispondere=true/.test(x.url)));
+  await p.aspetta(() => p.righe().length === 2);
+  assert.equal(p.righe().length, 2);
+  assert.equal(p.q('.filtro-attivo').textContent, 'Da rispondere · togli filtro');
+  assert.equal(p.q('.piastrella[data-filtro="da-rispondere"]').getAttribute('aria-pressed'), 'true');
+  await p.clicTesto('togli filtro');
+  await p.aspetta(() => p.righe().length === 3);
+  assert.equal(p.righe().length, 3);
+  assert.equal(p.q('.filtro-attivo').textContent, '');
+  p.chiudi();
+});
+
+test('Da fare: "Scadenze della settimana" apre le Scadenze; tutto a zero il riquadro sparisce', opz, async () => {
+  const s = B.server();
+  s.mails = [B.mail(901, { da_rispondere: false })];
+  s.scadenzeProssime = 1;
+  const p = await B.pagina(s);
+  assert.deepEqual(p.tutti('.da-fare .piastrella').map((t) => t.dataset.filtro), ['scadenze']);
+  await p.clicTesto('Scadenze della settimana');
+  await p.aspetta(() => p.q('.area.scadenze'));
+  assert.ok(p.q('.area.scadenze'));
+  assert.equal(p.q('.piastrella[data-filtro="scadenze"]').getAttribute('aria-pressed'), 'true');
+  p.chiudi();
+
+  const vuoto = B.server();
+  vuoto.mails = [B.mail(901, { da_rispondere: false })];
+  const p2 = await B.pagina(vuoto);
+  assert.equal(p2.q('.da-fare'), null, 'tutto a zero: niente riquadro');
+  p2.chiudi();
+});
+
+test('Da fare con un server senza /api/conteggi: le piastrelle restano (sono i filtri), senza numeri', opz, async () => {
+  const s = B.server();
+  s.conteggi = false;
+  s.mails = [B.mail(901)];
+  const p = await B.pagina(s);
+  const tessere = p.tutti('.da-fare .piastrella');
+  assert.equal(tessere.length, 4);
+  assert.ok(tessere.every((t) => !t.querySelector('.numero')));
+  p.chiudi();
+});
+
+test('colori dai nomi del server: gruppi, cerchi, etichette e "In breve"; nome sconosciuto o assente = ardesia', opz, async () => {
+  const s = B.server();
+  s.gruppi[1].colore = 'fucsia'; // Fornitori: un nome che il PC non conosce
+  delete s.gruppi[4].colore; // Newsletter: nessun colore
+  s.mails = [
+    B.mail(931, { gruppo_id: 1, letta: true }),
+    B.mail(932, { gruppo_id: 2, letta: true, mittente: { nome: '', indirizzo: 'bianchi@esempio.it' } }),
+    B.mail(933, { gruppo_id: 3, letta: true, mittente: { nome: 'Comune di Bassano', indirizzo: 'urbanistica@comune.esempio.it' } }),
+  ];
+  const p = await B.pagina(s);
+  const voce = (id) => p.q('.voce.gruppo[data-gruppo="' + id + '"]');
+  assert.ok(voce(1).classList.contains('col-blu'));
+  assert.ok(voce(2).classList.contains('col-ardesia'), 'nome fuori elenco: ardesia');
+  assert.ok(voce(3).classList.contains('col-ambra'));
+  assert.ok(voce(5).classList.contains('col-ardesia'), 'senza colore: ardesia');
+  assert.ok(voce(1).querySelector('.pallino'), 'col pallino colorato');
+  const avatar = (id) => p.q('.avatar', p.riga(id));
+  assert.equal(avatar(931).textContent, 'MR');
+  assert.ok(avatar(931).classList.contains('col-blu'), 'il cerchio ha il colore del gruppo');
+  assert.equal(avatar(932).textContent, 'BI');
+  assert.ok(avatar(932).classList.contains('col-ardesia'));
+  assert.equal(avatar(933).textContent, 'CB');
+  const etichetta = p.q('.gruppo-etichetta', p.riga(933));
+  assert.equal(etichetta.textContent, 'Amministrazione e fatture');
+  assert.ok(etichetta.classList.contains('col-ambra'), 'in "Tutte" l\'etichetta del gruppo nel suo colore');
+  p.clic(p.riga(933));
+  await p.aspetta(() => p.q('.riassunto-mail'));
+  assert.ok(p.q('.riassunto-mail').classList.contains('col-ambra'), '"In breve" tinto col colore del gruppo');
+  assert.match(p.q('.riassunto-mail').textContent, /^In breve/);
+  assert.ok(p.q('.testa-mail .avatar').classList.contains('col-ambra'));
+  assert.ok(p.q('.testa-mail .chip-gruppo').classList.contains('col-ambra'));
+  await p.clicTesto('Clienti');
+  await p.aspetta(() => p.righe().length === 1);
+  assert.equal(p.q('.gruppo-etichetta', p.righe()[0]), null, 'dentro un gruppo l\'etichetta non serve');
+  p.chiudi();
+});
+
+test('righe dell\'elenco: al massimo due segnali nell\'ordine della guida, sempre icona + parola', opz, async () => {
+  const s = B.server();
+  s.mails = [
+    B.mail(941, { sospetta: true, urgenza: 'alta', smistamento: 'da_controllare', letta: false }),
+    B.mail(942, { urgenza: 'alta', smistamento: 'da_controllare', letta: true }),
+  ];
+  s.bozze[60] = B.bozza(60, { mail_id: 942 });
+  const p = await B.pagina(s);
+  const segni = (id) => p.tutti('.segni .segno', p.riga(id));
+  assert.deepEqual(segni(941).map((x) => x.textContent), ['Possibile truffa', 'urgente']);
+  assert.deepEqual(segni(942).map((x) => x.textContent), ['urgente', 'da controllare'], '"risposta pronta" è il quarto: non ci sta');
+  assert.ok(segni(941).every((x) => x.querySelector('svg')), 'ogni segnale ha la sua icona');
+  assert.ok(p.riga(941).classList.contains('non-letta'));
+  assert.match(p.riga(941).getAttribute('aria-label'), /^possibile truffa, urgente, non letta, Mario Rossi/, 'il lettore schermo legge prima i segnali');
+  p.chiudi();
+});
+
+test('barra in basso: con la risposta pronta [Rifai] [Invia →], e Invia apre la conferma di sempre', opz, async () => {
+  const s = await conMailEBozza();
+  let chiesta = null;
+  s.inviaLocale = async (corpo) => { chiesta = corpo; return { annullato: true }; };
+  const p = await B.pagina(s);
+  await apriPrima(p);
+  const barra = p.q('.lettura > .barra-risposta');
+  assert.ok(barra, 'la barra sta in fondo alla colonna, fuori dalla parte che scorre');
+  const pulsanti = p.tutti('button', barra);
+  assert.deepEqual(pulsanti.map((b) => b.textContent.trim()), ['Rifai', 'Invia']);
+  assert.ok(pulsanti[1].classList.contains('primario'), 'Invia nel colore dell\'accento');
+  assert.ok(!pulsanti[0].classList.contains('primario'));
+  assert.ok(pulsanti[1].querySelector('svg'), 'con la freccia');
+  assert.equal(p.q('.sezione-bozza .azioni-bozza'), null, 'niente pulsanti doppi dentro la risposta');
+  assert.equal(p.pulsante('Scarta'), null, '"Scarta la risposta" sta nel menu ⋮');
+  assert.equal(p.q('#bozza-testo').readOnly, false, 'la risposta si scrive direttamente');
+  pulsanti[1].click();
+  await p.aspetta(() => chiesta);
+  assert.deepEqual(chiesta, { bozza_id: 55, versione: 3 }, 'la conferma di Windows riceve la versione vista, come prima');
+  await p.aspetta(() => p.avvisi().some((a) => /Invio annullato/.test(a)));
+  assert.deepEqual(p.tutti('button', p.q('.barra-risposta')).map((b) => b.textContent.trim()), ['Rifai', 'Invia']);
+  p.chiudi();
+});
+
+test('barra in basso: "Prepara la risposta" se va risposta, poi "Sol sta scrivendo la risposta…" con l\'indicatore', opz, async () => {
+  const s = B.server();
+  s.mails = [B.mail(940, { letta: true, da_rispondere: true })];
+  s.prontaDopoMs = 300;
+  const p = await B.pagina(s);
+  p.clic(p.righe()[0]);
+  await p.aspetta(() => p.pulsante('Prepara la risposta'));
+  const prepara = p.pulsante('Prepara la risposta');
+  assert.ok(prepara.closest('.barra-risposta'));
+  assert.ok(prepara.classList.contains('primario'));
+  prepara.click();
+  await p.aspetta(() => /Sol sta scrivendo la risposta/.test(p.q('.barra-risposta').textContent));
+  assert.ok(p.q('.barra-risposta .indicatore'));
+  assert.equal(p.tutti('.barra-risposta button').length, 0, 'mentre scrive niente pulsanti');
+  await p.aspetta(() => p.q('#bozza-testo'), 4000);
+  assert.deepEqual(p.tutti('.barra-risposta button').map((b) => b.textContent.trim()), ['Rifai', 'Invia']);
+  p.chiudi();
+});
+
+test('barra in basso: mail sospetta senza risposta chiesta = nessuna barra; mail che non chiede risposta = solo "Rispondi" discreto', opz, async () => {
+  const s = B.server();
+  s.mails = [B.mail(950, { letta: true, sospetta: true, da_rispondere: true }), B.mail(951, { letta: true, da_rispondere: false })];
+  const p = await B.pagina(s);
+  p.clic(p.riga(950));
+  await p.aspetta(() => p.q('.riquadro.truffa'));
+  await B.dorme(60);
+  assert.equal(p.q('.barra-risposta').children.length, 0, 'nessuna barra: "Non è una truffa" è nell\'avviso');
+  assert.ok(p.pulsante('Non è una truffa', p.q('.riquadro.truffa')));
+  p.clic(p.riga(951));
+  await p.aspetta(() => p.q('.oggetto-grande') && /Oggetto 951/.test(p.q('.oggetto-grande').textContent));
+  await B.dorme(40);
+  const pulsanti = p.tutti('.barra-risposta button');
+  assert.deepEqual(pulsanti.map((b) => b.textContent.trim()), ['Rispondi']);
+  assert.ok(!pulsanti[0].classList.contains('primario'));
+  p.chiudi();
+});
+
+test('menu ⋮: le azioni rare (da leggere, non serve rispondere, segnala, scarta la risposta con conferma)', opz, async () => {
+  const s = await conMailEBozza();
+  const p = await B.pagina(s);
+  await apriPrima(p);
+  const menu = () => p.q('.menu-azioni');
+  const apri = async () => { p.q('.testa-mail .pulsante-menu').click(); await p.aspetta(() => !menu().hidden); };
+  await apri();
+  assert.deepEqual(p.tutti('button', menu()).map((b) => b.textContent.trim()), ['Segna come da leggere', 'Non serve rispondere', 'Segnala come possibile truffa', 'Scarta la risposta']);
+  assert.equal(p.q('.testa-mail .pulsante-menu').getAttribute('aria-expanded'), 'true');
+  p.tasto('Escape', {}, p.d.activeElement);
+  await B.dorme(30);
+  assert.ok(menu().hidden, 'Esc chiude');
+  await apri();
+  await p.clicTesto('Segna come da leggere', menu());
+  await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/812/letta'));
+  assert.deepEqual(s.log.find((x) => x.url === '/server/api/mail/812/letta').corpo, { letta: false });
+  await apri();
+  await p.clicTesto('Scarta la risposta', menu());
+  await p.aspetta(() => p.pulsante('Sì, scarta'));
+  assert.ok(!s.log.some((x) => x.url.endsWith('/scarta')), 'prima chiede');
+  await p.clicTesto('Sì, scarta');
+  await p.aspetta(() => s.log.some((x) => x.url === '/server/api/bozze/55/scarta'));
+  assert.ok(s.log.some((x) => x.url === '/server/api/bozze/55/scarta'));
+  p.chiudi();
+});
+
+test('"È nel gruppo giusto?" solo sulle da controllare, sotto l\'intestazione: [Sì] accetta, [Cambia] apre "Sposta in"', opz, async () => {
+  const s = B.server();
+  s.mails = [B.mail(960, { letta: true, smistamento: 'da_controllare', gruppo_id: 2 }), B.mail(961, { letta: true })];
+  const p = await B.pagina(s);
+  p.clic(p.riga(961));
+  await p.aspetta(() => p.q('.oggetto-grande') && /Oggetto 961/.test(p.q('.oggetto-grande').textContent));
+  assert.equal(p.q('.riga-controllo'), null, 'le altre non hanno riquadri sul gruppo');
+  p.clic(p.riga(960));
+  await p.aspetta(() => p.q('.riga-controllo'));
+  const riga = p.q('.riga-controllo');
+  assert.match(riga.textContent, /È nel gruppo giusto\?/);
+  const figli = Array.from(p.q('.mail-aperta').children);
+  assert.equal(figli.indexOf(riga), figli.indexOf(p.q('.testa-mail')) + 1, 'subito sotto l\'intestazione');
+  await p.clicTesto('Cambia', riga);
+  await p.aspetta(() => !p.q('.sposta-in-elenco').hidden);
+  assert.ok(p.q('.sposta-in-elenco .voce-gruppo.attuale[data-gruppo="2"]'), 'il gruppo di adesso è segnato');
+  p.tasto('Escape', {}, p.d.activeElement);
+  await B.dorme(30);
+  await p.clicTesto('Sì', p.q('.riga-controllo'));
+  await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/960/conferma'));
+  assert.ok(!s.log.some((x) => x.url.endsWith('/sposta')));
+  p.chiudi();
+});
+
+test('trascinando una mail il gruppo sotto si illumina del suo colore, e al rilascio la mail ci va', opz, async () => {
+  const s = B.server();
+  s.mails = [B.mail(970, { letta: true })];
+  const p = await B.pagina(s);
+  const bersaglio = p.q('.voce.gruppo[data-gruppo="2"]');
+  assert.ok(bersaglio.classList.contains('col-verde'));
+  const dati = { 'text/x-sol-mail': JSON.stringify([970]) };
+  const evento = (tipo) => {
+    const e = new p.w.Event(tipo, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'dataTransfer', { value: { types: Object.keys(dati), getData: (k) => dati[k] || '', dropEffect: 'none' } });
+    return e;
+  };
+  bersaglio.dispatchEvent(evento('dragover'));
+  assert.ok(bersaglio.classList.contains('sopra'), 'si illumina');
+  bersaglio.dispatchEvent(evento('dragleave'));
+  assert.ok(!bersaglio.classList.contains('sopra'));
+  bersaglio.dispatchEvent(evento('dragover'));
+  bersaglio.dispatchEvent(evento('drop'));
+  assert.ok(!bersaglio.classList.contains('sopra'));
+  await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/970/sposta'));
+  assert.equal(s.log.find((x) => x.url === '/server/api/mail/970/sposta').corpo.gruppo_id, 2);
+  p.chiudi();
+});
+
+test('impostazioni dei gruppi: il colore si sceglie tra i 12 (PATCH colore) e si vede subito a sinistra', opz, async () => {
+  const s = B.server();
+  s.mails = [B.mail(980)];
+  const p = await B.pagina(s);
+  await p.clicTesto('Impostazioni');
+  await p.aspetta(() => p.tutti('.scheda-riga.con-colore').length === 6);
+  const riga = p.tutti('.scheda-riga.con-colore')[0];
+  assert.match(riga.textContent, /Clienti · blu/, 'il colore anche a parole');
+  assert.ok(p.q('.pallino-gruppo.col-blu', riga));
+  await p.clicTesto('Colore', riga);
+  const colori = p.tutti('.colore-scelta', riga);
+  assert.deepEqual(colori.map((c) => c.dataset.colore), B.COLORI);
+  assert.deepEqual(colori.map((c) => c.getAttribute('aria-label')), ['Blu', 'Verde', 'Ambra', 'Viola', 'Grigio', 'Ardesia', 'Petrolio', 'Rosa', 'Indaco', 'Oliva', 'Marrone', 'Ciano']);
+  assert.equal(p.q('.colore-scelta[aria-pressed="true"]', riga).dataset.colore, 'blu');
+  p.q('.colore-scelta[data-colore="petrolio"]', riga).click();
+  await p.aspetta(() => s.log.some((x) => x.metodo === 'PATCH' && x.url === '/server/api/gruppi/1'));
+  assert.deepEqual(s.log.find((x) => x.metodo === 'PATCH' && x.url === '/server/api/gruppi/1').corpo, { colore: 'petrolio' });
+  await p.aspetta(() => p.q('.voce.gruppo[data-gruppo="1"]').classList.contains('col-petrolio'));
+  assert.ok(p.q('.voce.gruppo[data-gruppo="1"]').classList.contains('col-petrolio'));
+  p.chiudi();
+});
+
+test('movimenti: la riga spostata scivola via, ma niente movimenti se Windows ne chiede meno', opz, async () => {
+  for (const meno of [false, true]) {
+    const s = B.server();
+    s.mails = [B.mail(990, { letta: true }), B.mail(991, { letta: true })];
+    const p = await B.pagina(s);
+    p.w.matchMedia = (q) => ({ matches: meno && /prefers-reduced-motion: reduce/.test(q), media: q });
+    await p.clicTesto('Clienti'); // dentro un gruppo, la mail spostata esce dall'elenco
+    await p.aspetta(() => p.righe().length === 2);
+    let scivolata = false;
+    new p.w.MutationObserver(() => { if (p.q('li.mail.uscita')) scivolata = true; })
+      .observe(p.q('.elenco-mail'), { subtree: true, attributes: true, attributeFilter: ['class'] });
+    p.clic(p.riga(990));
+    await p.aspetta(() => p.q('.oggetto-grande') && /Oggetto 990/.test(p.q('.oggetto-grande').textContent));
+    p.q('.elenco-mail').focus();
+    p.tasto('2', {}, p.q('.elenco-mail'));
+    await p.aspetta(() => !p.riga(990));
+    assert.equal(p.riga(990), null);
+    assert.equal(scivolata, !meno, meno ? 'con meno movimenti la riga sparisce e basta' : 'la riga scivola via');
+    p.chiudi();
+  }
 });

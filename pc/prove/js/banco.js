@@ -1,6 +1,7 @@
 // Banco di prova per l'interfaccia (pc/ui): carica index.html + logica.js + api.js + app.js in jsdom e
-// risponde alle richieste con un server finto che imita il server di Sol (contratto v1.1: versione delle
-// bozze, rifai, conteggi, arretrato, ricollega...). Dati solo finti (Rossi, Bianchi, @esempio.it).
+// risponde alle richieste con un server finto che imita il server di Sol (contratto v1.1-v1.3: versione delle
+// bozze, rifai, conteggi, arretrato, ricollega, possibile truffa, colori dei gruppi e scadenze_prossime).
+// Dati solo finti (Rossi, Bianchi, @esempio.it).
 //
 // jsdom non è nel repository: si cerca con require('jsdom') (npm install jsdom in questa cartella), poi nella
 // variabile d'ambiente SOL_JSDOM, poi nel file jsdom.percorso accanto a questo (non versionato). Senza jsdom
@@ -14,6 +15,9 @@ const UI = process.env.SOL_UI || path.join(__dirname, '..', '..', 'ui');
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 const INDIRIZZO = /^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$/;
+// §17: i 12 colori dei gruppi, nell'ordine in cui il server li assegna ai gruppi nuovi.
+const COLORI = ['blu', 'verde', 'ambra', 'viola', 'grigio', 'ardesia', 'petrolio', 'rosa', 'indaco', 'oliva', 'marrone', 'ciano'];
+const FRASE_COLORE = "Il colore non è tra quelli che Sol conosce: scegline uno dall'elenco.";
 
 function caricaJsdom() {
   try { return require('jsdom'); } catch (e) { /* non installato qui */ }
@@ -52,17 +56,18 @@ function server() {
   const s = {
     stato: {
       abbinato: true, server: 'https://sol.esempio.ts.net', senza_protezione: false, nome_dispositivo: 'Computer dello studio', dispositivo_id: 7,
-      non_riconosciuto: false, raggiungibile: true, irraggiungibile_dal: null, ultimo_contatto: null, urgenti_da_leggere: 0, versione: '1.0.0',
+      non_riconosciuto: false, raggiungibile: true, irraggiungibile_dal: null, ultimo_contatto: null, urgenti_da_leggere: 0, versione: '1.1.0',
       avvio_al_login: true, avvio_disponibile: true, nome_suggerito: 'Computer STUDIO',
       aggiornamento: { attivo: true, disponibile: null, annunciata: null, scaricamento_in_corso: false, scaricato: null, errore_scaricamento: null },
     },
     salute: { ok: true, versione: '1.0.0', autenticato: true, decisore: { stato: 'pronto' }, scrittore: { stato: 'pronto' }, caselle: [], modalita_prova: true, coda: {} },
     gruppi: [
-      { id: 1, nome: 'Clienti', ordine: 1, descrizione: 'un cliente chiede o conferma un lavoro' }, { id: 2, nome: 'Fornitori', ordine: 2 },
-      { id: 3, nome: 'Amministrazione e fatture', ordine: 3 }, { id: 4, nome: 'PEC ed enti', ordine: 4 },
-      { id: 5, nome: 'Newsletter', ordine: 5 }, { id: 6, nome: 'Altro', ordine: 6 },
+      { id: 1, nome: 'Clienti', ordine: 1, colore: 'blu', descrizione: 'un cliente chiede o conferma un lavoro' }, { id: 2, nome: 'Fornitori', ordine: 2, colore: 'verde' },
+      { id: 3, nome: 'Amministrazione e fatture', ordine: 3, colore: 'ambra' }, { id: 4, nome: 'PEC ed enti', ordine: 4, colore: 'viola' },
+      { id: 5, nome: 'Newsletter', ordine: 5, colore: 'grigio' }, { id: 6, nome: 'Altro', ordine: 6, colore: 'ardesia' },
     ],
     conteggi: true, // false = server di prima della v1.1 (404 su /api/conteggi)
+    scadenzeProssime: 0, // §17: conteggi.scadenze_prossime
     mails: [],
     bozze: {},
     regole: [],
@@ -106,6 +111,7 @@ function server() {
     da_controllare: s.mails.filter((m) => m.smistamento === 'da_controllare').length,
     sospette: s.mails.filter((m) => m.sospetta).length,
     da_leggere: s.mails.filter((m) => !m.letta).length,
+    scadenze_prossime: s.scadenzeProssime,
     bozze_pronte: Object.values(s.bozze).filter((b) => b.stato === 'pronta').length,
     gruppi: Object.fromEntries(s.gruppi.map((g) => [String(g.id), { da_leggere: s.mails.filter((m) => m.gruppo_id === g.id && !m.letta).length, totale: s.mails.filter((m) => m.gruppo_id === g.id).length }])),
   });
@@ -127,12 +133,17 @@ function server() {
     if (p === '/server/api/gruppi' && metodo === 'GET') return [200, s.gruppi.map((g) => Object.assign({ cartella: 'Sol/' + g.nome, da_leggere: s.mails.filter((x) => x.gruppo_id === g.id && !x.letta).length, totale: s.mails.filter((x) => x.gruppo_id === g.id).length }, g))];
     if (p === '/server/api/gruppi' && metodo === 'POST') {
       if (s.gruppi.length >= 16) return [422, { errore: 'Puoi avere al massimo 16 gruppi: togline uno prima di aggiungerne un altro.', codice: 'non_valido' }];
-      const g = { id: 100 + s.gruppi.length, nome: corpo.nome, ordine: s.gruppi.length + 1, descrizione: corpo.descrizione || corpo.nome };
+      if (corpo.colore != null && !COLORI.includes(corpo.colore)) return [422, { errore: FRASE_COLORE, codice: 'non_valido', campo: 'colore' }];
+      // Senza colore: il primo dell'elenco non ancora usato (§17).
+      const usati = new Set(s.gruppi.map((x) => x.colore));
+      const colore = corpo.colore || COLORI.find((c) => !usati.has(c)) || COLORI[s.gruppi.length % COLORI.length];
+      const g = { id: 100 + s.gruppi.length, nome: corpo.nome, ordine: s.gruppi.length + 1, colore, descrizione: corpo.descrizione || corpo.nome };
       s.gruppi.push(g);
       return [201, g];
     }
     if ((m = /^\/server\/api\/gruppi\/(\d+)$/.exec(p)) && metodo === 'PATCH') {
       const g = s.gruppi.find((x) => x.id === Number(m[1]));
+      if (corpo.colore != null && !COLORI.includes(corpo.colore)) return [422, { errore: FRASE_COLORE, codice: 'non_valido', campo: 'colore' }];
       Object.assign(g, corpo);
       return [200, g];
     }
@@ -256,6 +267,14 @@ function server() {
   return s;
 }
 
+// Le pagine aperte: se un test fallisce prima di chiuderla, la chiude chiudiTutte() (afterEach), così i timer
+// della pagina non tengono vivo il processo dei test.
+const aperte = new Set();
+function chiudiTutte() {
+  for (const p of aperte) p.chiudi();
+  aperte.clear();
+}
+
 async function pagina(s, opzioni) {
   const o = opzioni || {};
   const html = fs.readFileSync(path.join(UI, 'index.html'), 'utf8').replace(/<script[^>]*><\/script>/g, '');
@@ -301,9 +320,16 @@ async function pagina(s, opzioni) {
       }
       return condizione();
     },
-    chiudi() { s.chiuso = true; w.close(); },
+    chiudi() {
+      aperte.delete(p);
+      if (p.chiusa) return;
+      p.chiusa = true;
+      s.chiuso = true;
+      w.close();
+    },
   };
+  aperte.add(p);
   return p;
 }
 
-module.exports = { jsdom, SENZA_JSDOM, server, pagina, mail, bozza, dorme, copia };
+module.exports = { jsdom, SENZA_JSDOM, server, pagina, chiudiTutte, mail, bozza, dorme, copia, COLORI };
