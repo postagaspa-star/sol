@@ -22,9 +22,10 @@ services:
     container_name: sol
     restart: unless-stopped
     ports:
-      # Porta di casa SOLO per l'installazione (http senza s: si chiude quando Tailscale funziona).
+      # Solo dal NAS stesso (verifiche via SSH). Le app passano da Tailscale (https, rete privata):
+      # la porta di casa in chiaro e' servita solo durante l'installazione ed e' chiusa dal 10/10/2026.
       # 8000 e 8100 sul NAS sono gia' occupate da altre app.
-      - "8200:8000"
+      - "127.0.0.1:8200:8000"
     env_file:
       - ./server/.env
     environment:

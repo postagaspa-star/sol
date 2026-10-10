@@ -1,8 +1,8 @@
-# Sol — contratto delle API (v1.1)
+# Sol — contratto delle API (v1.2)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
-Le novità della v1.1 (dopo la prima revisione) sono raccolte nella sezione 15 e valgono sopra
-il testo delle sezioni precedenti dove lo contraddicono.
+Le novità della v1.1 (dopo la prima revisione) sono raccolte nella sezione 15, quelle della v1.2
+(possibile truffa) nella sezione 16: valgono sopra il testo delle sezioni precedenti dove lo contraddicono.
 Repo pubblico: negli esempi e nei test solo dati finti (Rossi, Bianchi, `@esempio.it`).
 
 ## 0. Cos'è Sol
@@ -383,3 +383,48 @@ Testo vuoto → le app non chiedono nemmeno la conferma (il server risponde comu
 - Sicurezza delle scelte: sotto 0,85 sul gruppo → `da_controllare`; per `da_rispondere` e `urgenza` sotto 0,6
   il server tiene il valore più prudente (`da_rispondere = si`, `urgenza = normale`) e lo segna come incerto
   nel campo `Mail.incerti` (elenco, es. `["urgenza"]`; vuoto se Sol è sicuro di tutto).
+
+## 16. Novità della v1.2: possibile truffa
+
+Il caso tipico per uno studio tecnico: una mail che sembra di un fornitore o di un cliente e chiede di
+pagare su un IBAN nuovo, di mandare fatture o documenti, di dare password o codici, o di aprire un link per
+"sbloccare" qualcosa. Sol non decide al posto di Manuel: mette un'etichetta rossa ben visibile e smette di
+trattare la mail come una richiesta normale.
+
+### 16.1 Quarta domanda al decisore
+Il server manda, insieme alle altre tre, la domanda `truffa` (testi in `decisore/app/domande_consigliate.json`,
+che resta la fonte; il server ne tiene una copia identica controllata da un test):
+```json
+{"id": "truffa", "domanda": "Questa mail potrebbe essere un tentativo di truffa o di raggiro?",
+ "opzioni": [
+   {"id": "si", "descrizione": "sì: chiede di cambiare IBAN o coordinate bancarie, di pagare con urgenza, di mandare fatture, documenti, password o codici, di aprire un link per sbloccare o verificare qualcosa, oppure finge di essere una banca, un corriere, un fornitore o un cliente con un indirizzo o un tono strano"},
+   {"id": "no", "descrizione": "no: è una normale comunicazione di lavoro, una fattura attesa, un avviso o una pubblicità"}]}
+```
+La domanda si fa per OGNI mail, anche per quelle smistate da una regola (mittente noto, PEC, newsletter):
+un indirizzo noto può essere stato rubato.
+
+### 16.2 Cosa fa il server
+- `Mail` aggiunge `"sospetta": true|false` e, nel dettaglio, `probabilita.truffa` (`{"si": 0.71, "no": 0.29}`).
+- `sospetta = true` quando la probabilità di "si" è almeno `soglia_truffa` (impostazione nuova, base 0,5:
+  meglio un'etichetta in più che una truffa non vista).
+- Una mail sospetta: va `da_controllare` (anche se il gruppo era sicuro o veniva da una regola); NON riceve la
+  bozza automatica; NON entra in "aspettano te" né tra le urgenti delle notifiche; dalle sue righe NON si
+  estraggono scadenze. Il riassunto di una riga sì (aiuta a capire senza aprirla).
+- `POST /api/mail/{id}/sospetta` `{"sospetta": false}` → "Non è una truffa": la mail torna normale (se va
+  risposta, Sol prepara la bozza come per le altre) e il decisore non la rimette sospetta.
+  `{"sospetta": true}` → "Segnala come possibile truffa" fatto dall'utente su una mail non segnalata.
+  Le regole imparate NON tolgono mai il controllo truffa ai mittenti.
+- `GET /api/mail?sospetta=true`; `GET /api/conteggi` aggiunge `"sospette"` (sospette non ancora chiarite).
+- `GET /api/impostazioni` aggiunge `"soglia_truffa": 0.5` (modificabile tra 0,2 e 0,9).
+- Se l'utente chiede a mano una bozza per una mail sospetta (`POST /api/mail/{id}/bozza`), il server la
+  prepara: è un gesto suo. Nella conferma d'invio le app avvisano.
+
+### 16.3 Cosa fanno le app
+- Etichetta rossa "Possibile truffa" sulla riga della mail, prima di tutte le altre.
+- Nel dettaglio, in cima e ben visibile: "Attenzione: questa mail potrebbe essere una truffa. Prima di pagare,
+  cambiare coordinate bancarie o mandare documenti, telefona al mittente a un numero che conosci già, non a
+  quello scritto nella mail." Pulsante "Non è una truffa". Sulle mail non segnalate, un'azione meno in vista
+  "Segnala come possibile truffa".
+- Filtro "Possibili truffe" con il numero da `conteggi.sospette`, mostrato solo se è maggiore di zero.
+- Conferma d'invio di una risposta a una mail sospetta: avviso in più in rosso, "Stai rispondendo a una mail
+  segnalata come possibile truffa", e il pulsante d'invio dice "Invia lo stesso".
