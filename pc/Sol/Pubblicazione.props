@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Le impostazioni del pacchetto, fuori dal .csproj così una build di sviluppo
+    resta veloce. Le usa prove/crea-pacchetto.ps1 con -p:PubblicazioneSol=true.
+  -->
+  <PropertyGroup Condition="'$(PubblicazioneSol)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- A cartella, non single-file: niente eseguibile che si scompatta da solo (gli antivirus lo guardano male). -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <!-- Niente trimming: WinForms e WebView2 usano la reflection. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>

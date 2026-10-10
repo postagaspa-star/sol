@@ -1,0 +1,11 @@
+# Il pacchetto si ricostruisce con prove/crea-pacchetto.ps1
+dist/
+
+# Per sicurezza, se qualcuno compila senza Directory.Build.props
+bin/
+obj/
+
+# jsdom per i test dell'interfaccia: si installa a parte (npm install jsdom in prove/js)
+# oppure si indica dove trovarlo in prove/js/jsdom.percorso (percorso di questo computer)
+prove/js/node_modules/
+prove/js/jsdom.percorso

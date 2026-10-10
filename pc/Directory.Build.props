@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    bin/ e obj/ fuori da OneDrive: il Desktop è sincronizzato, e OneDrive che
+    blocca un file mentre lo carica fa fallire la build a caso ("file in uso").
+    Il pacchetto finale resta in pc/dist (prove/crea-pacchetto.ps1).
+  -->
+  <PropertyGroup>
+    <SolCartellaBuild>$(LOCALAPPDATA)\Sol-pc\build\</SolCartellaBuild>
+    <BaseIntermediateOutputPath>$(SolCartellaBuild)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(SolCartellaBuild)$(MSBuildProjectName)\bin\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

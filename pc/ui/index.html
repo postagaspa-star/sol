@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <!-- Solo file di questa cartella e solo chiamate a questa origine (/locale/* e /server/*): niente internet. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Sol</title>
+  <link rel="stylesheet" href="stile.css">
+</head>
+<body>
+  <div id="app" class="app" aria-busy="true">
+    <p class="avvio">Sol si sta aprendo…</p>
+  </div>
+  <div id="avvisi" class="avvisi" role="status" aria-live="polite"></div>
+  <noscript><p class="avvio">Per funzionare Sol ha bisogno di JavaScript.</p></noscript>
+  <script src="logica.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

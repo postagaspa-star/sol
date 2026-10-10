@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <RootNamespace>Sol</RootNamespace>
+    <AssemblyName>Sol</AssemblyName>
+    <AssemblyTitle>Sol</AssemblyTitle>
+    <Product>Sol</Product>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <ApplicationIcon>Risorse\sol.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+    <!-- Il pacchetto WebView2 si porta dietro anche la parte WPF, che qui non si usa: il conflitto su WindowsBase non conta. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <Import Project="Pubblicazione.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sol.Tests" />
+    <EmbeddedResource Include="Risorse\sol.ico" LogicalName="Sol.Risorse.sol.ico" />
+  </ItemGroup>
+
+  <!--
+    L'interfaccia sta in pc/ui: si copia nella cartella ui accanto a Sol.exe e
+    viaggia anche dentro l'exe (se manca accanto, Installazione.AssicuraUi la estrae).
+  -->
+  <PropertyGroup>
+    <SolCartellaUi>$(MSBuildProjectDirectory)\..\ui\</SolCartellaUi>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(SolCartellaUi)**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <EmbeddedResource Include="$(SolCartellaUi)**\*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
+  </ItemGroup>
+
+</Project>
