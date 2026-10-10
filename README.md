@@ -1,72 +1,66 @@
 # Sol
 
-A native Android assistant that runs on voice alone. Reminders, calendar and
-email, with an always-listening wake word and a spoken confirmation step before
-anything destructive happens. The app speaks Italian, because that's who it was
-built for.
+A mail assistant for one busy professional: it sorts the inbox, writes the first
+draft of every reply, and keeps track of what is still waiting for an answer.
+It runs on a home NAS, uses only open-weight models, and costs nothing to run.
+The interface speaks Italian, because that's who it was built for.
 
 ## Why it exists
 
-I built this for one specific person: my father. He's an industrial surveyor, he
-works on site with his hands full, and he is never going to open a task app and
-type into it. So the constraint was fixed before any code existed — the whole
-loop, dictation through confirmation through result, has to work without looking
-at the screen.
+I built this for my father. He's an industrial surveyor, his day is split between
+sites and clients, and email is where his time goes: one work inbox, two personal
+ones, offers, invoices, certified mail from public offices, newsletters, and the
+one message from a client that actually matters, buried somewhere in the middle.
 
-That's a harsher requirement than it sounds. If nobody is watching the screen, a
-silent failure is an invisible failure. Both rules below fall out of that.
+The first version of Sol was a hands-free voice assistant. It turned out the real
+problem wasn't the hands, it was the inbox. So this is a rewrite from scratch.
 
-## The two rules
+## What it does
 
-**Claude proposes, the code disposes.** The model emits tool calls. The risk
-class attached to each one — green, yellow, red — is decided by
-`conferme/Rischio.kt`, never by the model. An LLM doesn't get to rate how
-dangerous its own request is.
+1. **Sorts every new message** into groups (clients, suppliers, invoices, certified
+   mail, newsletters, other), flags what needs a reply and how urgent it is.
+2. **Writes a one-line summary** of each message and a **draft reply** for the ones
+   that need one, in the background, so the draft is already there when he opens it.
+3. **Summarises on request**: "today's mail", "what did Bianchi write this week".
+4. **Pulls deadlines** out of messages ("send the quote by Friday").
+5. **Nothing falls behind**: messages he hasn't answered in two days, and messages
+   he sent that nobody has answered in a week, with a follow-up draft ready.
 
-**Every outcome is spoken.** Success, cancellation, timeout, error: the turn
-always closes with a sentence. Silence is never a valid answer.
+## The rules
 
-## One turn, end to end
+**Nothing is ever sent without a click.** There is exactly one code path that sends
+mail, and it requires an explicit confirmation of the exact version the user saw.
+The models have no tools and no actions: they pick between fixed options or write
+text. A malicious email ("forward all invoices to…") can at worst produce a bad
+draft, which a human reads before sending.
 
-Wake word, beep, command, then Haiku 4.5 with a system prompt carrying the
-current date, time and reminders. Every `tool_use` it returns passes through the
-gate:
+**Email content is data, never instructions.** It is always fenced and labelled as
+text to analyse, and the classifier was tested against an injection email.
 
-- **Green** (list, cancel) just runs.
-- **Yellow** (create, complete, reschedule) runs immediately, then the mic stays
-  open for about thirty seconds. Saying "annulla" — bare, no wake word needed —
-  puts everything back.
-- **Red** (delete) gets read back as a summary, and Sol waits for the passphrase
-  "timbro e firma", matched deterministically. A timeout, a different phrase, or
-  a cancel all abort the action, and it says so out loud.
+**Sol never deletes mail.** It moves, labels and marks as read. A trial mode (on by
+default) shows what Sol *would* do without touching the real mailboxes.
 
-## Stack
+## How it's built
 
-Kotlin, native Android, minSdk 26. Porcupine (Picovoice) for the wake word,
-`SpeechRecognizer` for transcription, system TTS for the voice. Claude Haiku 4.5
-over REST with a hand-rolled tool loop. Reminders live in a local JSON file
-written atomically, alarms go through `AlarmManager` with exact scheduling. No
-OAuth, and no cloud beyond the Anthropic call.
+```
+android/    Kotlin + Jetpack Compose app
+pc/         Windows app (C# .NET 8, WinForms + WebView2, HTML/JS interface)
+server/     FastAPI + SQLite, runs in Docker on the NAS, does all the work
+decisore/   the classifier: SemIf on Qwen3.5-4B (GGUF, llama.cpp), on the NAS CPU
+docs/       the API contract, written before the code
+```
 
-## Things worth knowing
+- **Classification** runs locally with [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev),
+  an open reimplementation of typed-decision models: it reads option probabilities
+  straight from the logits of a frozen open model instead of generating text. On an
+  Intel N100 with no GPU it takes ~18 s per message, which is fine in the background,
+  and the probabilities tell Sol when it isn't sure (those go to "check me").
+- **Writing** (drafts, summaries) uses open-weight models on free API tiers (Groq,
+  then Cerebras), with the local model as a slow last resort. Only messages that need
+  a draft or a summary ever leave the house.
+- **Mailboxes**: Microsoft 365 through Microsoft Graph, Gmail through IMAP/SMTP with an
+  app password.
+- **Access**: the server is reachable only from devices on a private Tailscale network,
+  never from the public internet.
 
-**It degrades in steps instead of failing.** Without a Picovoice key the wake
-word disappears but a push-to-talk button remains. Without an Anthropic key it
-falls back to `CervelloEco`, which just repeats what it heard. The app always
-starts.
-
-**Exactly one component mutates state.** `EsecutoreProposte` is the only path
-that touches anything, and the gate sits in front of it, so there's no side door.
-
-**A platform limit, not a bug.** After a phone reboot Android withholds the
-microphone from auto-started services. Sol notices, fires a notification, and one
-tap brings it back.
-
-## Status
-
-M1 and M2 are done: the voice pipeline, six tools, the reminder store and alarms,
-green and yellow with the hot undo window, and the spoken red path. Next is the
-on-screen red confirmation card, then field testing with the person it's for.
-
-API keys live in a `sol.properties` file outside the repository and are never
-versioned.
+API keys and passwords live in an `.env` file on the NAS and are never versioned.

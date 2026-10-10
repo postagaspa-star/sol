@@ -1,0 +1,100 @@
+# Sol sul NAS (Docker Compose, progetto "sol"). Cartella sul NAS: /volume1/docker/Sol-NAS
+#
+# Tre container:
+#   sol            -> il server: legge le caselle, smista, prepara bozze e riassunti
+#   sol-decisore   -> SemIf + Qwen3.5-4B sul processore del NAS: sceglie i gruppi
+#   sol-tailscale  -> indirizzo https fisso RAGGIUNGIBILE SOLO dai dispositivi della
+#                     rete Tailscale di casa (Serve, non Funnel): sono mail di lavoro,
+#                     da internet non si deve nemmeno vedere che il server esiste.
+#
+# Le chiavi (SOL_CHIAVE, SOL_GROQ_KEY, SOL_CEREBRAS_KEY, SOL_MS_CLIENT_ID, TS_AUTHKEY)
+# stanno in server/.env, che non va mai nel repo.
+# La rete sol-rete si crea una volta (docker network create sol-rete): e' "esterna" cosi'
+# il decisore si puo' riavviare da solo senza che il server perda la strada.
+name: sol
+
+services:
+  sol:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: sol-server:1.0.0
+    container_name: sol
+    restart: unless-stopped
+    ports:
+      # Porta di casa SOLO per l'installazione (http senza s: si chiude quando Tailscale funziona).
+      # 8000 e 8100 sul NAS sono gia' occupate da altre app.
+      - "8200:8000"
+    env_file:
+      - ./server/.env
+    environment:
+      SOL_ENV: prod
+      SOL_DB: /data/sol.db
+      SOL_APK_DIR: /apk
+      SOL_DECISORE_URL: http://sol-decisore:8300
+    volumes:
+      - sol-data:/data
+      - ./server/apk:/apk
+    networks:
+      - sol-rete
+    depends_on:
+      - sol-decisore
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  sol-decisore:
+    build: ./decisore
+    image: sol-decisore:1.0.0
+    container_name: sol-decisore
+    restart: unless-stopped
+    environment:
+      SOL_THREADS: "${SOL_THREADS:-3}"            # 4 core sul NAS: uno resta agli altri servizi
+      SOL_CONTESTO: "${SOL_CONTESTO:-4096}"
+      SOL_STILE_PROMPT: "${SOL_STILE_PROMPT:-insieme}"
+    volumes:
+      - ./decisore/modelli:/modelli               # il modello (3 GB) si scarica qui al primo avvio
+    networks:
+      - sol-rete
+    ports:
+      - "127.0.0.1:8300:8300"                     # solo per le verifiche dal NAS stesso
+    # Il NAS ha ~4,9 GB liberi e ci girano altri servizi: il modello ne usa 2-3,
+    # il tetto evita che un picco faccia soffrire tutto il resto.
+    mem_limit: 3800m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  sol-tailscale:
+    image: tailscale/tailscale:latest
+    container_name: sol-tailscale
+    restart: unless-stopped
+    env_file:
+      - ./server/.env            # qui dentro TS_AUTHKEY
+    environment:
+      TS_HOSTNAME: sol
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_AUTH_ONCE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - sol-tailscale-stato:/var/lib/tailscale
+      - ./tailscale:/config
+    networks:
+      - sol-rete
+    depends_on:
+      - sol
+    profiles:
+      - tailscale                # parte solo quando TS_AUTHKEY c'e': docker compose --profile tailscale up -d
+
+networks:
+  sol-rete:
+    external: true
+
+volumes:
+  sol-data:
+  sol-tailscale-stato:
