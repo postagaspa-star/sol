@@ -6,3 +6,11 @@ local.properties
 captures/
 *.apk
 *.aab
+.venv/
+__pycache__/
+*.db
+.env
+bin/
+obj/
+dist/
+*.gguf
