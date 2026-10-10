@@ -1,0 +1,15 @@
+# Dipendenze dell'immagine (Python 3.12). Volutamente SENZA torch: SemIf con llama.cpp
+# usa transformers solo per il tokenizzatore, e torch peserebbe ~1-2 GB per niente.
+# Per questo SemIf e llama-cpp-python si installano con --no-deps (vedi Dockerfile)
+# e qui sotto ci sono le loro dipendenze vere.
+fastapi==0.143.0
+uvicorn==0.54.0
+pydantic==2.14.0
+transformers==5.17.0
+tokenizers==0.23.2
+huggingface-hub==1.31.0
+numpy==2.2.6
+jinja2==3.1.6
+# dipendenze di llama-cpp-python 0.3.35
+typing-extensions>=4.5
+diskcache==5.6.3

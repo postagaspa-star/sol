@@ -1,0 +1,6 @@
+# Solo per i test su PC (Windows compreso): niente modello, niente llama.cpp.
+fastapi==0.143.0
+pydantic==2.14.0
+httpx==0.28.1
+numpy
+pytest

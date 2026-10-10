@@ -1,0 +1,67 @@
+{
+  "nota": "Domande consigliate per lo smistamento della posta (le 3 del contratto). Il server di Sol dovrebbe mandare esattamente questi testi: il decisore li prepara all'avvio e la prima mail non paga la preparazione (~40 s sul NAS). Collaudo: prova D in README.",
+  "domande": [
+    {
+      "id": "gruppo",
+      "domanda": "Chi ha scritto questa mail allo studio e per quale motivo? Scegli il gruppo.",
+      "opzioni": [
+        {
+          "id": "Clienti",
+          "descrizione": "un cliente (azienda o privato) chiede un preventivo, un intervento, un sopralluogo, oppure conferma o segue un lavoro dello studio"
+        },
+        {
+          "id": "Fornitori",
+          "descrizione": "un'azienda che VENDE allo studio manda offerte, listini, conferme d'ordine o consegne"
+        },
+        {
+          "id": "Amministrazione e fatture",
+          "descrizione": "fatture ricevute, solleciti di pagamento, banca, commercialista, tasse"
+        },
+        {
+          "id": "PEC ed enti",
+          "descrizione": "PEC o comunicazioni di Comune, Regione, Vigili del fuoco o altri enti pubblici"
+        },
+        {
+          "id": "Newsletter",
+          "descrizione": "newsletter, pubblicità, promozioni, webinar, mail inviate a molti destinatari"
+        },
+        {
+          "id": "Altro",
+          "descrizione": "mail personali o che non rientrano negli altri gruppi"
+        }
+      ]
+    },
+    {
+      "id": "da_rispondere",
+      "domanda": "Chi ha scritto aspetta una risposta scritta dallo studio?",
+      "opzioni": [
+        {
+          "id": "si",
+          "descrizione": "sì: c'è una domanda, una richiesta o una conferma da dare"
+        },
+        {
+          "id": "no",
+          "descrizione": "no: è solo un avviso, una fattura, una pubblicità o dice di non rispondere"
+        }
+      ]
+    },
+    {
+      "id": "urgenza",
+      "domanda": "Quanto è urgente occuparsi di questa mail?",
+      "opzioni": [
+        {
+          "id": "alta",
+          "descrizione": "alta: un problema bloccante, una scadenza entro pochi giorni o un sollecito"
+        },
+        {
+          "id": "normale",
+          "descrizione": "normale: da gestire nelle prossime settimane"
+        },
+        {
+          "id": "bassa",
+          "descrizione": "bassa: nessuna fretta, informativa o pubblicitaria"
+        }
+      ]
+    }
+  ]
+}
