@@ -12,8 +12,8 @@ sites and clients, and email is where his time goes: one work inbox, two persona
 ones, offers, invoices, certified mail from public offices, newsletters, and the
 one message from a client that actually matters, buried somewhere in the middle.
 
-The first version of Sol was a hands-free voice assistant. It turned out the real
-problem wasn't the hands, it was the inbox. So this is a rewrite from scratch.
+The first version of Sol was a hands-free voice assistant, until it became clear that
+the real problem was the inbox rather than his hands, so this is a rewrite from scratch.
 
 ## What it does
 
@@ -30,14 +30,15 @@ problem wasn't the hands, it was the inbox. So this is a rewrite from scratch.
 
 **Nothing is ever sent without a click.** There is exactly one code path that sends
 mail, and it requires an explicit confirmation of the exact version the user saw.
-The models have no tools and no actions: they pick between fixed options or write
-text. A malicious email ("forward all invoices to…") can at worst produce a bad
-draft, which a human reads before sending.
+The models have no tools and no actions, since they only pick between fixed options
+or write text, so a malicious email ("forward all invoices to…") can at worst produce
+a bad draft that a human reads before sending.
 
 **Email content is data, never instructions.** It is always fenced and labelled as
-text to analyse, and the classifier was tested against an injection email.
+text to analyse, with the models' own control tokens neutralised, and the classifier
+was tested against injection emails written to look like system turns.
 
-**Sol never deletes mail.** It moves, labels and marks as read. A trial mode (on by
+**Sol never deletes mail.** It moves, labels and marks as read, and a trial mode (on by
 default) shows what Sol *would* do without touching the real mailboxes.
 
 ## How it's built
