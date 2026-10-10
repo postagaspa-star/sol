@@ -200,7 +200,7 @@ public sealed class ContestoSol : ApplicationContext
         {
             try
             {
-                var invia = new TaskDialogButton(Motore.ConfermaInvio.PulsanteInvia);
+                var invia = new TaskDialogButton(Motore.ConfermaInvio.PulsantePer(anteprima));
                 var annulla = new TaskDialogButton(Motore.ConfermaInvio.PulsanteAnnulla);
                 var pagina = new TaskDialogPage
                 {
@@ -211,6 +211,8 @@ public sealed class ContestoSol : ApplicationContext
                     DefaultButton = annulla,
                     AllowCancel = true,
                     SizeToContent = true,
+                    // §16.3: risposta a una possibile truffa = avviso in rosso (la barra rossa in cima alla finestra).
+                    Icon = anteprima.Sospetta ? TaskDialogIcon.ShieldErrorRedBar : null,
                 };
                 var scelta = finestra != null && !finestra.IsDisposed
                     ? TaskDialog.ShowDialog(finestra, pagina, TaskDialogStartupLocation.CenterOwner)

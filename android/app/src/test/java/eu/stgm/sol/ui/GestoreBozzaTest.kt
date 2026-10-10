@@ -140,6 +140,26 @@ class GestoreBozzaTest {
     }
 
     @Test
+    fun `risposta a una possibile truffa - la conferma lo dice in piu`() {
+        bozzaPronta()
+        server.rispondi("GET /api/mail/812", Esempi.DETTAGLIO.trimEnd().removeSuffix("}") + """, "sospetta": true}""")
+        val conferma = apriConferma()
+        assertTrue(conferma.sospetta)
+        assertFalse(conferma.giaRisposto)
+        assertTrue("chiedere la conferma non invia", invii.isEmpty())
+        server.rispondi("POST /api/bozze/55/invia", Esempi.bozza("inviata"))
+        gestore.confermaInvio()
+        aspetta { gestore.stato.value.bozza?.stato == "inviata" }
+        assertEquals(1, invii.size)
+    }
+
+    @Test
+    fun `mail normale - nessun avviso di truffa nella conferma`() {
+        bozzaPronta()
+        assertFalse(apriConferma().sospetta)
+    }
+
+    @Test
     fun `durante la conferma i campi sono bloccati`() {
         bozzaPronta()
         apriConferma()

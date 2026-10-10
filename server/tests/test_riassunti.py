@@ -26,7 +26,9 @@ def test_riassunto_di_oggi(client, auth, finta, servizi, decisore):
     for i in oggi["mail_citate"]:
         assert f"[#{i}]" in oggi["testo"]
     prompt_oggi = next(g for g in decisore.generati if "Riassumi le mail arrivate oggi" in g[-1]["testo"])
-    assert "Sono 4, di cui 2 importanti" in prompt_oggi[-1]["testo"]
+    # La mail-trappola è urgente ma è una possibile truffa: non conta tra le importanti e lo si dice.
+    assert "Sono 4, di cui 1 importanti" in prompt_oggi[-1]["testo"]
+    assert "ATTENZIONE: segnalata come possibile truffa" in prompt_oggi[-1]["testo"]
 
 
 def test_riassunto_di_oggi_si_rifa_ogni_ora_e_con_mail_importanti(client, auth, finta, servizi, decisore, orologio):

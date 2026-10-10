@@ -1,4 +1,4 @@
-"""Mail (contratto, sezioni 6, 15.2, 15.8, 15.13)."""
+"""Mail (contratto, sezioni 6, 15.2, 15.8, 15.13, 16)."""
 
 import sqlite3
 from typing import Literal
@@ -11,7 +11,7 @@ from ..caselle import ErroreCasella
 from ..db import get_conn
 from ..errori import ErroreApi, conflitto, non_trovato
 from ..lavoro import LUCCHETTO_SPOSTA, riferimento
-from ..schemi import LettaIn, RispondereIn, SpostaIn
+from ..schemi import LettaIn, RispondereIn, SospettaIn, SpostaIn
 from ..servizi import Servizi, servizi
 from .comuni import connettore_della_casella
 from .gruppi import salva_regola
@@ -37,9 +37,13 @@ def elenco(
     cerca: str | None = Query(default=None, max_length=200),
     limite: int = Query(default=50, ge=1, le=200),
     prima_di: int | None = None,
+    sospetta: bool | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     condizioni, valori = [], []
+    if sospetta is not None:
+        condizioni.append("m.sospetta = ?")
+        valori.append(1 if sospetta else 0)
     if gruppo_id is not None:
         condizioni.append("m.gruppo_id = ?")
         valori.append(gruppo_id)
@@ -47,8 +51,9 @@ def elenco(
         condizioni.append("m.smistamento = ?")
         valori.append(smistamento)
     if da_rispondere is not None:
-        # Contratto 15.13: "da rispondere" = da rispondere E non ancora risposta.
-        condizione = "(COALESCE(m.da_rispondere, 0) = 1 AND m.risposta_data = 0)"
+        # Contratto 15.13: "da rispondere" = da rispondere E non ancora risposta (e, 16.2, non
+        # una possibile truffa: quella si controlla, non si "risponde").
+        condizione = "(COALESCE(m.da_rispondere, 0) = 1 AND m.risposta_data = 0 AND m.sospetta = 0)"
         condizioni.append(condizione if da_rispondere else f"NOT {condizione}")
     if urgenza is not None:
         condizioni.append("COALESCE(m.urgenza, 'normale') = ?")
@@ -156,6 +161,17 @@ def letta(mail_id: int, corpo: LettaIn, conn: sqlite3.Connection = Depends(get_c
     except ErroreCasella as e:
         raise ErroreApi(502, e.messaggio) from e
     conn.execute("UPDATE mail SET letta = ? WHERE id = ?", (1 if corpo.letta else 0, mail_id))
+    return forme.mail_lista(conn, [_mail(conn, mail_id)])[0]
+
+
+@router.post("/mail/{mail_id}/sospetta")
+def segna_sospetta(mail_id: int, corpo: SospettaIn, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
+    """Contratto 16.2: "Non è una truffa" (false) rimette la mail nel flusso normale;
+    "Segnala come possibile truffa" (true) la toglie. La decisione dell'utente vince sul
+    decisore, anche se la mail viene valutata di nuovo."""
+    _mail(conn, mail_id)
+    smista.decisione_utente_truffa(conn, mail_id, corpo.sospetta)
+    s.lavoro.sveglia("scrittore")  # se va risposta, la bozza automatica parte adesso
     return forme.mail_lista(conn, [_mail(conn, mail_id)])[0]
 
 

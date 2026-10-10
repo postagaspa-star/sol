@@ -250,6 +250,7 @@ fun ImpostazioniScreen(
                         }
                     },
                     onSoglia = vm::cambiaSoglia,
+                    onSogliaTruffa = vm::cambiaSogliaTruffa,
                     onGiorniRisposta = vm::cambiaGiorniRisposta,
                     onGiorniSollecito = vm::cambiaGiorniSollecito,
                     onFirma = vm::cambiaFirma,
@@ -487,6 +488,7 @@ private fun ComeLavora(
     abilitato: Boolean,
     onModalitaProva: (Boolean) -> Unit,
     onSoglia: (Double) -> Unit,
+    onSogliaTruffa: (Double) -> Unit,
     onGiorniRisposta: (Int) -> Unit,
     onGiorniSollecito: (Int) -> Unit,
     onFirma: (String) -> Unit,
@@ -525,6 +527,28 @@ private fun ComeLavora(
         onValueChange = { soglia = it },
         onValueChangeFinished = { onSoglia(soglia.toDouble()) },
         valueRange = 0.5f..0.99f,
+        enabled = abilitato,
+    )
+    HorizontalDivider()
+
+    // 16.2: la soglia oltre la quale una mail è "possibile truffa".
+    var sogliaTruffa by remember(imp.sogliaTruffa) { mutableFloatStateOf(imp.sogliaTruffa.toFloat()) }
+    Text(
+        "Controllo truffe: ${(sogliaTruffa * 100).roundToInt()}%",
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 12.dp),
+    )
+    Text(
+        "Più bassa = più mail segnalate come possibile truffa (anche qualcuna normale). " +
+            "Più alta = meno segnalazioni, ma qualche truffa può sfuggire.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Slider(
+        value = sogliaTruffa,
+        onValueChange = { sogliaTruffa = it },
+        onValueChangeFinished = { onSogliaTruffa(sogliaTruffa.toDouble()) },
+        valueRange = ImpostazioniSol.SOGLIA_TRUFFA_MINIMA.toFloat()..ImpostazioniSol.SOGLIA_TRUFFA_MASSIMA.toFloat(),
         enabled = abilitato,
     )
     HorizontalDivider()

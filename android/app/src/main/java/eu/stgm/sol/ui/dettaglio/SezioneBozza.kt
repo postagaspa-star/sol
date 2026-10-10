@@ -39,6 +39,7 @@ import eu.stgm.sol.ui.PulsanteTesto
 import eu.stgm.sol.ui.PulsanteVuoto
 import eu.stgm.sol.ui.Riquadro
 import eu.stgm.sol.ui.RichiestaConferma
+import eu.stgm.sol.ui.RiquadroTruffa
 import eu.stgm.sol.ui.StatoBozza
 import eu.stgm.sol.ui.TitoloSezione
 import eu.stgm.sol.ui.quandoCompleto
@@ -48,6 +49,9 @@ const val AIUTO_DETTATURA = "Puoi anche dettare col microfono della tastiera."
 
 /** L'avviso della conferma quando a quella mail si è già risposto da un altro programma (15.13). */
 const val AVVISO_GIA_RISPOSTO = "Hai già risposto a questa mail da un altro programma: vuoi mandare anche questa?"
+
+/** L'avviso in più della conferma per le risposte a una mail segnalata (16.3). */
+const val AVVISO_TRUFFA_INVIO = "Stai rispondendo a una mail segnalata come possibile truffa."
 
 /**
  * La bozza sotto una mail (o da sola, per un sollecito). [onRifai]: rifare la bozza
@@ -339,6 +343,7 @@ fun DialogoInvio(richiesta: RichiestaConferma, onConferma: () -> Unit, onAnnulla
                 if (richiesta.cambiata) {
                     Riquadro("È cambiata dopo che l'hai controllata: ricontrollala prima di inviarla.", grave = true)
                 }
+                if (richiesta.sospetta) RiquadroTruffa(AVVISO_TRUFFA_INVIO)
                 if (richiesta.giaRisposto) Riquadro(AVVISO_GIA_RISPOSTO, grave = true)
                 Text("A: ${richiesta.a.joinToString(", ")}", style = MaterialTheme.typography.bodyLarge)
                 if (richiesta.cc.isNotEmpty()) {
@@ -358,7 +363,16 @@ fun DialogoInvio(richiesta: RichiestaConferma, onConferma: () -> Unit, onAnnulla
                 )
             }
         },
-        confirmButton = { PulsantePieno(if (richiesta.giaRisposto) "Manda anche questa" else "Invia adesso", onConferma) },
+        confirmButton = {
+            PulsantePieno(
+                when {
+                    richiesta.sospetta -> "Invia lo stesso"
+                    richiesta.giaRisposto -> "Manda anche questa"
+                    else -> "Invia adesso"
+                },
+                onConferma,
+            )
+        },
         dismissButton = { PulsanteTesto("Annulla", onAnnulla) },
     )
 }

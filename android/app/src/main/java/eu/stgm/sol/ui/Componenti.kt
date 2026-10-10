@@ -117,6 +117,34 @@ fun AvvisoLettura(errore: String?, daCacheDel: Long?, onRiprova: () -> Unit, mod
     Riquadro(testo, modifier, grave = true, azione = "Riprova", onAzione = onRiprova)
 }
 
+/**
+ * Un avviso di possibile truffa (16.3): colori propri, ben visibili ma non da
+ * allarme. [contenuto] sotto il testo (per esempio il pulsante "Non è una truffa").
+ */
+@Composable
+fun RiquadroTruffa(testo: String, modifier: Modifier = Modifier, contenuto: @Composable () -> Unit = {}) {
+    val segni = LocalSegni.current
+    Surface(
+        color = segni.truffaFondo,
+        contentColor = segni.truffaTesto,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = segni.truffaIcona,
+                    modifier = Modifier.padding(top = 2.dp, end = 12.dp).size(24.dp),
+                )
+                Text(testo, style = MaterialTheme.typography.bodyLarge)
+            }
+            contenuto()
+        }
+    }
+}
+
 /** La modalità prova si vede sempre, in cima alla posta. */
 @Composable
 fun AvvisoModalitaProva(modifier: Modifier = Modifier) {
@@ -133,25 +161,27 @@ fun AvvisoModalitaProva(modifier: Modifier = Modifier) {
     }
 }
 
-enum class TipoSegno { URGENTE, DA_RISPONDERE, BOZZA_PRONTA, DA_CONTROLLARE }
+enum class TipoSegno { TRUFFA, URGENTE, DA_RISPONDERE, BOZZA_PRONTA, DA_CONTROLLARE }
 
 /** Un segno piccolo su una mail: parole, non solo colori. */
 @Composable
 fun Segno(tipo: TipoSegno, modifier: Modifier = Modifier) {
     val segni = LocalSegni.current
     val (testo, fondo, colore) = when (tipo) {
+        TipoSegno.TRUFFA -> Triple("Possibile truffa", segni.urgenteFondo, segni.urgenteTesto)
         TipoSegno.URGENTE -> Triple("Urgente", segni.urgenteFondo, segni.urgenteTesto)
         TipoSegno.DA_RISPONDERE -> Triple("Da rispondere", segni.rispondereFondo, segni.rispondereTesto)
         TipoSegno.BOZZA_PRONTA -> Triple("Bozza pronta", segni.bozzaFondo, segni.bozzaTesto)
         TipoSegno.DA_CONTROLLARE -> Triple("Da controllare", segni.controllareFondo, segni.controllareTesto)
     }
     Surface(color = fondo, contentColor = colore, shape = RoundedCornerShape(6.dp), modifier = modifier) {
-        Text(
-            testo,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-        )
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Lo stesso rosso di "Urgente", ma col triangolo: le due etichette non si confondono.
+            if (tipo == TipoSegno.TRUFFA) {
+                Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.padding(end = 4.dp).size(14.dp))
+            }
+            Text(testo, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        }
     }
 }
 

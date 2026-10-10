@@ -116,8 +116,10 @@ class ClientDecisore:
         with self._lock:
             self._rifiuti_di_fila += 1
 
-    def decidi(self, stato: str, domande: list[dict]) -> dict:
-        """→ {"id_domanda": {"scelta": ..., "probabilita": {...}}}."""
+    def decidi(self, stato: str, domande: list[dict], facoltative: frozenset = frozenset()) -> dict:
+        """→ {"id_domanda": {"scelta": ..., "probabilita": {...}}}.
+        Le domande `facoltative` (la truffa, contratto 16) possono mancare nella risposta o
+        avere una scelta strana (un decisore vecchio): si tolgono e il resto vale."""
         try:
             with self._client(TIMEOUT_DECIDI) as c:
                 r = c.post("/decidi", json={"stato": stato, "domande": domande})
@@ -149,6 +151,9 @@ class ClientDecisore:
             risposta = risposte.get(domanda["id"]) if isinstance(risposte, dict) else None
             opzioni = [o["id"] for o in domanda["opzioni"]]
             if not isinstance(risposta, dict) or risposta.get("scelta") not in opzioni:
+                if domanda["id"] in facoltative:
+                    log.info("decisore: nessuna risposta valida alla domanda %s", domanda["id"])
+                    continue
                 self._rifiuto()
                 raise RispostaNonValida(f"scelta fuori dalle opzioni per {domanda['id']}")
             probabilita = risposta.get("probabilita") or {}

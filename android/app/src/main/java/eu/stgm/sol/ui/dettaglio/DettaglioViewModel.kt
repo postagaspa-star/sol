@@ -159,6 +159,39 @@ class DettaglioViewModel(
         }
     }
 
+    /** 16.3 "Non è una truffa": la mail torna normale e il decisore non la rimette sospetta. */
+    fun nonETruffa() = cambiaSospetta(false)
+
+    /** 16.3 "Segnala come possibile truffa", su una mail che Sol non aveva segnalato. */
+    fun segnalaTruffa() = cambiaSospetta(true)
+
+    private fun cambiaSospetta(sospetta: Boolean) {
+        val mail = _stato.value.mail ?: return
+        azione {
+            when (val esito = client.segnaSospetta(mail.id, sospetta)) {
+                is Esito.Ok -> {
+                    val nuova = esito.dato
+                    aggiorna(
+                        mail.copy(
+                            sospetta = sospetta,
+                            smistamento = nuova.smistamento.ifBlank { mail.smistamento },
+                            daRispondere = nuova.daRispondere,
+                            bozza = nuova.bozza ?: mail.bozza,
+                        ),
+                    )
+                    // Tornata normale, se va risposta Sol prepara la bozza: la si mostra appena c'è.
+                    nuova.bozza?.id?.let { bozza.imposta(it) }
+                    if (sospetta) {
+                        "Segnata come possibile truffa: Sol non preparerà risposte da solo."
+                    } else {
+                        "Va bene: Sol la tratta come una mail normale."
+                    }
+                }
+                else -> throw Fallita(esito.messaggio)
+            }
+        }
+    }
+
     fun cambiaDaRispondere() {
         val mail = _stato.value.mail ?: return
         val valore = !mail.daRispondere

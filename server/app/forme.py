@@ -97,6 +97,7 @@ def _mail(r: sqlite3.Row, bozza: dict | None) -> dict:
         "allegati": json.loads(r["allegati"] or "[]"),
         "pec": pec(r),
         "incerti": json.loads(r["incerti"] or "[]"),
+        "sospetta": bool(r["sospetta"]),  # contratto 16.2: possibile truffa
     }
 
 
@@ -119,6 +120,7 @@ def mail_dettaglio(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "gruppo": probabilita.get("gruppo", {}),
             "da_rispondere": probabilita.get("da_rispondere", {}),
             "urgenza": probabilita.get("urgenza", {}),
+            "truffa": probabilita.get("truffa", {}),
         },
     )
     return base

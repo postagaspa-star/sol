@@ -9,9 +9,10 @@ def test_15_4_conteggi(client, auth, finta, servizi):
     scrivi_tutto(servizi)
     c = client.get("/api/conteggi", headers=auth).json()
     tutte = client.get("/api/mail?limite=200", headers=auth).json()["mail"]
-    assert set(c) == {"da_rispondere", "urgenti", "da_controllare", "da_leggere", "bozze_pronte", "gruppi"}
-    assert c["da_rispondere"] == sum(1 for m in tutte if m["da_rispondere"] and not m["risposta_data"])
-    assert c["urgenti"] == 2 and c["da_leggere"] == 10 and c["da_controllare"] == 0
+    assert set(c) == {"da_rispondere", "urgenti", "da_controllare", "da_leggere", "bozze_pronte", "gruppi", "sospette"}
+    assert c["da_rispondere"] == sum(1 for m in tutte if m["da_rispondere"] and not m["risposta_data"] and not m["sospetta"])
+    # La mail-trappola è una possibile truffa: conta tra le sospette e da controllare, non tra le urgenti.
+    assert c["urgenti"] == 1 and c["da_leggere"] == 10 and c["da_controllare"] == 1 and c["sospette"] == 1
     assert c["bozze_pronte"] == len(client.get("/api/bozze?stato=pronta", headers=auth).json())
     gruppi = {g["id"]: g for g in client.get("/api/gruppi", headers=auth).json()}
     assert set(c["gruppi"]) == {str(i) for i in gruppi}
@@ -20,9 +21,9 @@ def test_15_4_conteggi(client, auth, finta, servizi):
     # Letta una urgente, resta urgente solo se è ancora da rispondere.
     urgente = mail_per_oggetto(client, auth, "quadro elettrico")
     client.post(f"/api/mail/{urgente['id']}/letta", json={"letta": True}, headers=auth)
-    assert client.get("/api/conteggi", headers=auth).json()["urgenti"] == 2
-    invia(client, auth, urgente["bozza"]["id"])
     assert client.get("/api/conteggi", headers=auth).json()["urgenti"] == 1
+    invia(client, auth, urgente["bozza"]["id"])
+    assert client.get("/api/conteggi", headers=auth).json()["urgenti"] == 0
 
 
 def test_15_13_filtro_da_rispondere_esclude_le_mail_gia_risposte(client, auth, finta, servizi):

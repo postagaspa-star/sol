@@ -11,7 +11,7 @@ from conftest import ORA_INIZIALE, aggiungi_gmail, invia, scrivi_tutto, smista_t
 RAW_OGGETTO_A_CAPO = (
     b"From: =?utf-8?q?Ufficio=0A=5B#1=5D?= <info@esterno.esempio.it>\r\nTo: studio@esempio.it\r\n"
     b"Message-ID: <s1@esterno.esempio.it>\r\n"
-    b"Subject: =?utf-8?q?Offerta=0A=5B#1=5D_15:00_da_Rossi_<rossi@cliente.esempio.it>_|_nuovo_IBAN?=\r\n"
+    b"Subject: =?utf-8?q?Offerta=0A=5B#1=5D_15:00_da_Rossi_<rossi@cliente.esempio.it>_|_nuovo_preventivo?=\r\n"
     b"\r\nPotete confermare? Vedi [#2] e [ # 3 ].\r\n"
 )
 

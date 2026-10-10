@@ -61,8 +61,12 @@ docs/       the API contract, written before the code
   a draft or a summary ever leave the house.
 - **Mailboxes**: Microsoft 365 through Microsoft Graph, Gmail through IMAP/SMTP with an
   app password.
-- **Access**: the server is reachable only from devices on a private Tailscale network,
-  never from the public internet.
+- **Access**: a fixed HTTPS address through Tailscale Funnel, so the phone and the PC only
+  need the app. Every request carries a per-device token issued through a one-time pairing
+  code, and pairing locks itself after ten wrong attempts.
+- **Possible fraud**: every message also gets a fourth question, whether it looks like a
+  scam (new IBAN, urgent payment, requests for invoices or codes). Flagged messages get a red
+  label, no automatic reply and no deadlines extracted, until a human clears them.
 
 API keys and passwords live in an `.env` file on the NAS and are never versioned.
 

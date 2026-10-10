@@ -404,6 +404,12 @@ class ImpostazioniViewModel(
     fun cambiaSoglia(valore: Double) =
         cambia(buildJsonObject { put("soglia_sicurezza", (valore * 100).toInt() / 100.0) }) { "Soglia salvata." }
 
+    /** 16.2: tra 0,2 e 0,9; più bassa = più mail segnalate. */
+    fun cambiaSogliaTruffa(valore: Double) {
+        val v = (valore.coerceIn(ImpostazioniSol.SOGLIA_TRUFFA_MINIMA, ImpostazioniSol.SOGLIA_TRUFFA_MASSIMA) * 100).toInt() / 100.0
+        cambia(buildJsonObject { put("soglia_truffa", v) }) { "Controllo truffe salvato." }
+    }
+
     fun cambiaGiorniRisposta(giorni: Int) =
         cambia(buildJsonObject { put("giorni_risposta", giorni.coerceIn(1, 30)) }) { "Salvato." }
 

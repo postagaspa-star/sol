@@ -32,7 +32,7 @@ def indietro(conn: sqlite3.Connection = Depends(get_conn)):
 
     limite_te = clock.iso(ora - timedelta(days=imp["giorni_risposta"]))
     righe = conn.execute(
-        forme.SELECT_MAIL + " WHERE m.da_rispondere = 1 AND m.risposta_data = 0 AND m.ricevuta_il < ?"
+        forme.SELECT_MAIL + " WHERE m.da_rispondere = 1 AND m.risposta_data = 0 AND m.sospetta = 0 AND m.ricevuta_il < ?"
         " ORDER BY m.ricevuta_il, m.id",
         (limite_te,),
     ).fetchall()

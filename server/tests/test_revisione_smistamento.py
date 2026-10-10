@@ -31,9 +31,10 @@ def _decisore_che_valida(rifiuta_sempre: bool = False, codice: int = 422):
             return httpx.Response(codice, json={"errore": "no", "codice": "non_valido"})
         if not 1 <= len(corpo["domande"]) <= 8 or any(not 2 <= len(d["opzioni"]) <= 16 for d in corpo["domande"]):
             return httpx.Response(422, json={"errore": "La domanda deve avere da 2 a 16 opzioni.", "codice": "non_valido"})
+        # La prima opzione per tutte; per la truffa "no" (la seconda), come per una mail normale.
         risposte = {
-            d["id"]: {"scelta": d["opzioni"][0]["id"], "massa_opzioni": 0.97, "token": 4,
-                      "probabilita": {o["id"]: (0.9 if i == 0 else 0.1 / (len(d["opzioni"]) - 1))
+            d["id"]: {"scelta": d["opzioni"][1 if d["id"] == "truffa" else 0]["id"], "massa_opzioni": 0.97, "token": 4,
+                      "probabilita": {o["id"]: (0.9 if i == (1 if d["id"] == "truffa" else 0) else 0.1 / (len(d["opzioni"]) - 1))
                                       for i, o in enumerate(d["opzioni"])}}
             for d in corpo["domande"]
         }
@@ -123,7 +124,8 @@ def test_domande_identiche_a_quelle_del_decisore(client, auth, app):
     if FILE_DECISORE.exists():  # nel repo c'è anche il decisore: le due copie non divergono
         assert copia["domande"] == json.loads(FILE_DECISORE.read_text(encoding="utf-8"))["domande"]
     with db.aperta(app.state.settings.db_path) as conn:
-        mandate = [smista.domanda_gruppo(conn), smista.DOMANDA_DA_RISPONDERE, smista.DOMANDA_URGENZA]
+        mandate = [smista.domanda_gruppo(conn), smista.DOMANDA_DA_RISPONDERE, smista.DOMANDA_URGENZA,
+                   smista.DOMANDA_TRUFFA]
     assert mandate == copia["domande"]
     assert {k: v for k, v in db.DESCRIZIONI_2.items()} == {
         chiave: o["descrizione"] for chiave, o in zip(

@@ -132,7 +132,11 @@
     rete: 'M3 9a13 13 0 0 1 18 0 M6 12.5a8.5 8.5 0 0 1 12 0 M9.5 16a3.5 3.5 0 0 1 5 0',
     tutte: 'M4 5h16v14H4z M4 14h4.5l1.5 2h4l1.5-2H20',
     campana: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20.5h4',
+    truffa: 'M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z M12 8v5 M12 16v.5',
   };
+
+  // §16.3: il testo dell'avviso in cima a una mail segnalata, parola per parola.
+  const AVVISO_TRUFFA = 'Attenzione: questa mail potrebbe essere una truffa. Prima di pagare, cambiare coordinate bancarie o mandare documenti, telefona al mittente a un numero che conosci già, non a quello scritto nella mail.';
 
   function icona(nome, classe) {
     const svg = document.createElementNS(SVG, 'svg');
@@ -454,6 +458,13 @@
       voceMenu(inPosta && S.filtro.tipo === 'urgenti', 'urgente', 'Urgenti', contatore(c.urgenti), () => scegliFiltro({ tipo: 'urgenti' })),
       voceMenu(inPosta && S.filtro.tipo === 'da-controllare', 'controlla', 'Da controllare', contatore(c.da_controllare), () => scegliFiltro({ tipo: 'da-controllare' })),
     ];
+    // §16.3: "Possibili truffe" compare solo quando ce n'è almeno una (o se è il filtro aperto, per non sparire sotto le mani).
+    const sospette = Number(c.sospette) || 0;
+    if (sospette > 0 || (inPosta && S.filtro.tipo === 'truffe')) {
+      const voce = voceMenu(inPosta && S.filtro.tipo === 'truffe', 'truffa', 'Possibili truffe', contatore(sospette), () => scegliFiltro({ tipo: 'truffe' }));
+      voce.firstChild.classList.add('voce-truffa');
+      fissi.push(voce);
+    }
     const gruppi = S.gruppi.map((g, i) => {
       const daLeggere = daLeggereGruppo(g);
       const li = voceMenu(inPosta && S.filtro.tipo === 'gruppo' && Number(S.filtro.id) === g.id, 'gruppo', g.nome,
@@ -723,6 +734,8 @@
 
   function segni(m) {
     const s = [];
+    // §16.3: "Possibile truffa" prima di tutte le altre etichette.
+    if (m.sospetta) s.push(h('span', { class: 'segno truffa' }, 'Possibile truffa'));
     if (m.urgenza === 'alta') s.push(h('span', { class: 'segno urgente' }, 'Urgente'));
     if (m.smistamento === 'da_controllare') s.push(h('span', { class: 'segno controllare' }, 'Da controllare'));
     if (m.pec) s.push(h('span', { class: 'segno pec', title: 'PEC arrivata da ' + (m.pec.mittente_busta || '') }, 'PEC'));
@@ -845,6 +858,7 @@
       case 'da-controllare': return m.smistamento === 'da_controllare';
       case 'da-rispondere': return !!m.da_rispondere && !m.risposta_data;
       case 'urgenti': return m.urgenza === 'alta';
+      case 'truffe': return !!m.sospetta;
       default: return true;
     }
   }
@@ -998,6 +1012,39 @@
     else avviso(nuovoValore ? (riuscite.length === 1 ? 'Segnata da rispondere.' : riuscite.length + ' mail segnate da rispondere.') : (riuscite.length === 1 ? 'Tolta da "da rispondere".' : riuscite.length + ' mail tolte da "da rispondere".'), 'ok');
     renderElenco();
     if (S.aperta && ids.includes(S.aperta.id)) aggiornaTestata();
+    aggiornaContatori();
+  }
+
+  /**
+   * "Non è una truffa" (false) o "Segnala come possibile truffa" (true): solo con il pulsante, mai con una
+   * scorciatoia. "Va bene così" (Invio) accetta il gruppo e NON tocca il sospetto (§16.3).
+   */
+  async function cambiaSospetta(id, valore) {
+    if (S.occupato) { avviso('Un momento: Sol sta ancora finendo l\'azione di prima.', 'info'); return; }
+    S.occupato = 'sospetta';
+    let r;
+    try {
+      r = await Api.post('/server/api/mail/' + id + '/sospetta', { sospetta: valore });
+    } finally {
+      S.occupato = null;
+    }
+    if (!r.ok) { avviso(r.errore, 'errore'); return; }
+    aggiornaInElenco(r.dati && r.dati.id ? r.dati : { id, sospetta: valore });
+    avviso(valore ? 'Segnalata come possibile truffa: Sol non le prepara risposte da sola.' : 'Tolta l\'etichetta "Possibile truffa": la mail torna normale.', 'ok');
+    renderElenco();
+    if (S.aperta && S.aperta.id === id) {
+      aggiornaTestata();
+      if (S.editor && !S.editor.distrutto) S.editor.render();
+      // Tornata normale, se va risposta Sol le prepara la bozza: si rilegge la mail per vederla arrivare.
+      if (!valore) {
+        const d = await Api.get('/server/api/mail/' + id);
+        if (d.ok && d.dati && S.aperta && S.aperta.id === id && S.aperta.mail) {
+          S.aperta.mail = Object.assign({}, S.aperta.mail, d.dati);
+          aggiornaTestata();
+          if (S.editor && !S.editor.distrutto && !S.editor.id && d.dati.bozza && d.dati.bozza.id) S.editor.carica(d.dati.bozza.id);
+        }
+      }
+    }
     aggiornaContatori();
   }
 
@@ -1185,6 +1232,7 @@
       const sic = m.sicurezza != null ? ' (sicura al ' + Math.round(m.sicurezza * 100) + '%)' : '';
       smistamento = h('div', { class: 'riquadro controllare' },
         h('p', null, 'Sol pensa che vada in ', h('strong', null, m.gruppo || 'Altro'), sic + ', ma non ne è certa. È giusto?'),
+        m.sospetta ? h('p', { class: 'aiuto' }, '"Va bene così" accetta solo il gruppo: la mail resta segnalata come possibile truffa finché non premi "Non è una truffa".') : null,
         h('div', { class: 'azioni' },
           h('button', { type: 'button', class: 'pulsante primario piccolo', onclick: () => vaBene([m.id]) }, 'Va bene così (Invio)'),
           spostaQui));
@@ -1203,7 +1251,13 @@
       ? h('ul', { class: 'allegati' }, m.allegati.map((a) => h('li', null, icona('allegato'), a.nome + (a.byte ? ' · ' + dimensione(a.byte) : ''))))
       : null;
 
+    const incerti = Array.isArray(m.incerti) ? m.incerti.map((x) => ({ urgenza: 'urgenza', da_rispondere: 'se va risposta', gruppo: 'gruppo', truffa: 'se è una possibile truffa' }[x] || null)).filter(Boolean) : [];
     svuota(S.dom.testata,
+      // §16.3: in cima e ben visibile, col pulsante esplicito per toglierlo.
+      m.sospetta ? h('div', { class: 'riquadro truffa', role: 'alert' },
+        h('p', { class: 'testo-truffa' }, AVVISO_TRUFFA),
+        h('div', { class: 'azioni' },
+          h('button', { type: 'button', class: 'pulsante secondario piccolo', onclick: () => cambiaSospetta(m.id, false) }, 'Non è una truffa'))) : null,
       S.aperta.memoria ? h('p', { class: 'in-linea avvertenza' }, 'Copia salvata il ' + L.dataLunga(S.aperta.memoria) + ': il server ora non risponde.') : null,
       h('h1', { class: 'oggetto-grande' }, m.oggetto || '(senza oggetto)'),
       h('dl', { class: 'intestazioni' },
@@ -1220,7 +1274,10 @@
         m.risposta_data ? h('span', { class: 'segno tenue' }, 'Risposta già data') : null,
         h('button', { type: 'button', class: 'pulsante testo piccolo', onclick: () => cambiaRispondere([m.id]) },
           m.da_rispondere ? 'Non serve rispondere (D)' : 'Segna da rispondere (D)'),
-        h('button', { type: 'button', class: 'pulsante testo piccolo', onclick: () => cambiaLetta([m.id]) }, m.letta ? 'Segna da leggere (L)' : 'Segna letta (L)')),
+        h('button', { type: 'button', class: 'pulsante testo piccolo', onclick: () => cambiaLetta([m.id]) }, m.letta ? 'Segna da leggere (L)' : 'Segna letta (L)'),
+        // Sulle mail non segnalate, un'azione meno in vista (§16.3).
+        m.sospetta ? null : h('button', { type: 'button', class: 'pulsante testo piccolo discreto', onclick: () => cambiaSospetta(m.id, true) }, 'Segnala come possibile truffa')),
+      incerti.length ? h('p', { class: 'tenue piccolo' }, 'Sol non è del tutto sicura di: ' + incerti.join(', ') + '.') : null,
       m.riassunto ? h('p', { class: 'riassunto-mail' }, h('span', { class: 'etichetta-riassunto' }, 'In breve'), m.riassunto) : null,
       allegati,
       h('div', { class: 'corpo-mail' }, m.corpo || m.anteprima || ''));
@@ -1715,11 +1772,13 @@
         if (t) t.focus();
       } }, 'Rifai con istruzioni');
       const giaRisposto = !ed.inviata && S.aperta && S.aperta.mail && S.aperta.mail.id === ed.mailId && S.aperta.mail.risposta_data;
+      const sospetta = !ed.inviata && S.aperta && S.aperta.mail && S.aperta.mail.id === ed.mailId && S.aperta.mail.sospetta;
       return h('div', { class: 'pannello-bozza' + (d.stato === 'errore' ? ' con-errore' : '') },
         h('div', { class: 'testa-bozza' },
           h('h2', null, titolo + (d.modificata ? ' (modificata da te)' : '')),
           ed.el.salvataggio),
         ed.inviata ? h('p', { class: 'tenue' }, 'Per: ' + (ed.inviata.a || []).join(', ') + ' – ' + (ed.inviata.oggetto || '')) : null,
+        sospetta ? messaggioInLinea('Stai rispondendo a una mail segnalata come possibile truffa: non mandare soldi, coordinate bancarie, documenti o password senza aver prima telefonato al mittente a un numero che conosci già.', 'truffa') : null,
         giaRisposto ? messaggioInLinea('Hai già risposto a questa mail (forse da un altro programma). Prima di inviare questa, controlla che serva davvero.', 'avvertenza') : null,
         ed.el.messaggio,
         campo('a', 'A'),
@@ -2375,6 +2434,11 @@
     const soglia = h('input', { type: 'range', id: 'imp-soglia', min: '50', max: '99', step: '1', value: String(Math.round((imp.soglia_sicurezza ?? 0.85) * 100)), 'data-campo': 'soglia_sicurezza' });
     const sogliaTesto = h('span', { class: 'valore' }, soglia.value + '%');
     soglia.addEventListener('input', () => { sogliaTesto.textContent = soglia.value + '%'; });
+    // §16.2: tra 0,2 e 0,9, base 0,5.
+    const soglia0 = Math.round((imp.soglia_truffa ?? 0.5) * 100);
+    const truffa = h('input', { type: 'range', id: 'imp-truffa', min: '20', max: '90', step: '5', value: String(soglia0), 'data-campo': 'soglia_truffa' });
+    const truffaTesto = h('span', { class: 'valore' }, truffa.value + '%');
+    truffa.addEventListener('input', () => { truffaTesto.textContent = truffa.value + '%'; });
     const gRisposta = h('input', { type: 'number', id: 'imp-gr', min: '1', max: '30', value: String(imp.giorni_risposta ?? 2), 'data-campo': 'giorni_risposta' });
     const gSollecito = h('input', { type: 'number', id: 'imp-gs', min: '1', max: '60', value: String(imp.giorni_sollecito ?? 7), 'data-campo': 'giorni_sollecito' });
     const firma = h('textarea', { id: 'imp-firma', rows: '3', value: imp.firma || '', 'data-campo': 'firma' });
@@ -2385,6 +2449,7 @@
       if (prova.checked !== !!imp.modalita_prova) dati.modalita_prova = prova.checked;
       const s = Number(soglia.value) / 100;
       if (Math.abs(s - (imp.soglia_sicurezza ?? 0.85)) > 0.001) dati.soglia_sicurezza = s;
+      if (Number(truffa.value) !== soglia0) dati.soglia_truffa = Number(truffa.value) / 100;
       if (Number(gRisposta.value) !== imp.giorni_risposta) dati.giorni_risposta = Number(gRisposta.value);
       if (Number(gSollecito.value) !== imp.giorni_sollecito) dati.giorni_sollecito = Number(gSollecito.value);
       if (firma.value !== (imp.firma || '')) dati.firma = firma.value;
@@ -2409,6 +2474,9 @@
       h('label', { for: 'imp-soglia' }, 'Quanto deve essere sicura Sol per smistare da sola: ', sogliaTesto),
       soglia,
       h('p', { class: 'aiuto' }, 'Sotto questa soglia la mail finisce in "Da controllare" e decidi tu.'),
+      h('label', { for: 'imp-truffa' }, 'Quanto deve sembrare una truffa perché Sol la segnali: ', truffaTesto),
+      truffa,
+      h('p', { class: 'aiuto' }, 'Più basso: Sol mette l\'etichetta "Possibile truffa" su più mail, anche su qualcuna normale. Più alto: solo sui casi più evidenti. Meglio un\'etichetta in più che una truffa non vista.'),
       h('div', { class: 'riga-campi' },
         h('div', { class: 'campo' }, h('label', { for: 'imp-gr' }, 'Ricordami le mail senza risposta dopo (giorni)'), gRisposta),
         h('div', { class: 'campo' }, h('label', { for: 'imp-gs' }, 'Proponi un sollecito dopo (giorni)'), gSollecito)),

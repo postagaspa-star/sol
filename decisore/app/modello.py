@@ -91,13 +91,18 @@ def _zittisci_llama(llama_cpp) -> None:
 def prepara_domande_consigliate(lettore) -> None:
     """Calcola subito la testa delle domande che il server di Sol manda di solito.
 
+    Due insiemi: tutte e quattro (gruppo, da_rispondere, urgenza, truffa) e le stesse
+    senza "gruppo", che il server non chiede quando il gruppo l'ha già deciso una regola.
     Se il server usa testi diversi non succede niente di male: la sua prima mail
-    paga la preparazione (~40 s sul NAS) e poi anche quella testa resta in memoria.
+    paga la preparazione (~45 s sul NAS) e poi anche quella testa resta in memoria.
     """
     try:
         dati = json.loads(FILE_DOMANDE_CONSIGLIATE.read_text(encoding="utf-8"))
         _, domande = leggi_decidi({"stato": "x", "domande": dati["domande"]})
         lettore.prepara(domande)
+        senza_gruppo = [d for d in domande if d.id != "gruppo"]
+        if senza_gruppo and len(senza_gruppo) < len(domande):
+            lettore.prepara(senza_gruppo)
     except Exception:  # noqa: BLE001 - è solo un anticipo, non deve bloccare l'avvio
         log.warning("domande consigliate non preparate", exc_info=True)
 

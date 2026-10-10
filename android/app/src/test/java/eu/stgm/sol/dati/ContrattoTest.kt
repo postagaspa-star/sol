@@ -212,6 +212,26 @@ class ContrattoTest {
     }
 
     @Test
+    fun `v1_2 - possibile truffa, probabilita, conteggio e soglia`() {
+        val m = JsonSol.decodeFromString(Mail.serializer(), Esempi.MAIL_SOSPETTA)
+        assertTrue(m.sospetta)
+        assertFalse("di base una mail non è sospetta", JsonSol.decodeFromString(Mail.serializer(), Esempi.MAIL).sospetta)
+        val d = JsonSol.decodeFromString(Mail.serializer(), Esempi.DETTAGLIO_SOSPETTO)
+        assertEquals(0.82, d.probabilitaTruffa!!, 0.0001)
+        assertNull(JsonSol.decodeFromString(Mail.serializer(), Esempi.DETTAGLIO).probabilitaTruffa)
+
+        assertEquals(2, JsonSol.decodeFromString(Conteggi.serializer(), """{"sospette": 2}""").sospette)
+        assertEquals(0, JsonSol.decodeFromString(Conteggi.serializer(), """{"urgenti": 1}""").sospette)
+
+        assertEquals(0.5, JsonSol.decodeFromString(ImpostazioniSol.serializer(), Esempi.impostazioni()).sogliaTruffa, 0.0001)
+        val imp = JsonSol.decodeFromString(
+            ImpostazioniSol.serializer(),
+            Esempi.impostazioni().trimEnd().removeSuffix("}") + """, "soglia_truffa": 0.35}""",
+        )
+        assertEquals(0.35, imp.sogliaTruffa, 0.0001)
+    }
+
+    @Test
     fun `una risposta qualunque non passa per impostazioni con la modalita prova accesa`() {
         val esito = runCatching { JsonSol.decodeFromString(ImpostazioniSol.serializer(), """{"ok": true}""") }
         assertTrue(esito.isFailure)

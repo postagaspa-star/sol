@@ -28,6 +28,9 @@
   --attenzione-tenue: #FAF0D9;
   --ok: #2C6449;
   --ok-tenue: #E1F0E7;
+  --truffa: #B3261E;
+  --truffa-tenue: #FCE8E6;
+  --su-truffa: #FFFFFF;
   --info-tenue: #E6EDF6;
   --ombra: 0 1px 2px rgba(20, 30, 45, 0.06), 0 2px 8px rgba(20, 30, 45, 0.06);
   --ombra-alta: 0 8px 28px rgba(20, 30, 45, 0.18);
@@ -62,6 +65,9 @@
     --attenzione-tenue: #362C17;
     --ok: #86C9A4;
     --ok-tenue: #1C3326;
+    --truffa: #F2726A;
+    --truffa-tenue: #3D1715;
+    --su-truffa: #1A0605;
     --info-tenue: #1F2C3C;
     --ombra: 0 1px 2px rgba(0, 0, 0, 0.3);
     --ombra-alta: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -390,6 +396,16 @@ input[type="range"] { width: 100%; max-width: 420px; accent-color: var(--primari
 .messaggio-bozza:empty, .spazio-banner:empty { display: none; }
 .banner-bozza { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
 .segno.pec { background: var(--info-tenue); color: var(--primario-forte); }
+
+/* --- Possibile truffa (§16.3): rosso pieno, il solo rosso pieno della pagina --- */
+.segno.truffa { background: var(--truffa); color: var(--su-truffa); font-weight: 650; }
+.riquadro.truffa { background: var(--truffa-tenue); border: 2px solid var(--truffa); border-radius: var(--raggio); margin: 0 0 14px; }
+.testo-truffa { font-weight: 600; color: var(--testo); }
+.in-linea.truffa { background: var(--truffa-tenue); color: var(--testo); border-left: 3px solid var(--truffa); font-weight: 500; }
+.voce-truffa .icona, .voce-truffa .etichetta { color: var(--truffa); }
+.voce-truffa .contatore { background: var(--truffa); color: var(--su-truffa); }
+.pulsante.discreto { color: var(--testo-3); font-weight: 500; }
+.pulsante.discreto:hover { color: var(--truffa); background: var(--truffa-tenue); }
 .sposta-in { display: inline-flex; align-items: center; gap: 6px; }
 .zona-casella:empty { display: none; }
 .zona-casella { margin-top: 8px; }

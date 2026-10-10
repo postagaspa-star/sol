@@ -1,5 +1,5 @@
 {
-  "nota": "Domande consigliate per lo smistamento della posta (le 3 del contratto). Il server di Sol dovrebbe mandare esattamente questi testi: il decisore li prepara all'avvio e la prima mail non paga la preparazione (~40 s sul NAS). Collaudo: prova D in README.",
+  "nota": "Domande consigliate per lo smistamento della posta (le 4 del contratto: gruppo, da_rispondere, urgenza, truffa, in quest'ordine). Il server di Sol deve mandare esattamente questi testi: il decisore li prepara all'avvio (anche senza 'gruppo', quando il gruppo l'ha già deciso una regola) e la prima mail non paga la preparazione (~45 s sul NAS).",
   "domande": [
     {
       "id": "gruppo",
@@ -60,6 +60,20 @@
         {
           "id": "bassa",
           "descrizione": "bassa: nessuna fretta, informativa o pubblicitaria"
+        }
+      ]
+    },
+    {
+      "id": "truffa",
+      "domanda": "Questa mail potrebbe essere un tentativo di truffa o di raggiro?",
+      "opzioni": [
+        {
+          "id": "si",
+          "descrizione": "sì: chiede di cambiare IBAN o coordinate bancarie, di pagare con urgenza, di mandare fatture, documenti, password o codici, di aprire un link per sbloccare o verificare qualcosa, oppure finge di essere una banca, un corriere, un fornitore o un cliente con un indirizzo o un tono strano"
+        },
+        {
+          "id": "no",
+          "descrizione": "no: è una normale comunicazione di lavoro, una fattura attesa, un avviso o una pubblicità"
         }
       ]
     }

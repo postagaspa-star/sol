@@ -48,6 +48,9 @@ class DecisoreFinto:
         self.genera_giu = False
         self.genera_rifiuta = False  # /genera risponde 422 (richiesta troppo lunga)
         self.incerto = False  # probabilità basse su da_rispondere e urgenza
+        # Truffa (contratto 16): None = decide con le parole chiave; un numero = probabilità
+        # di "si" per tutte; "manca" = un decisore vecchio che non risponde a quella domanda.
+        self.truffa = None
         self.rifiuti_di_fila = 0
 
     def salute(self, massima_eta: float = 30.0) -> dict:
@@ -71,7 +74,9 @@ class DecisoreFinto:
                 return gruppo
         return "Clienti" if "Clienti" in opzioni else opzioni[0]
 
-    def decidi(self, stato: str, domande: list[dict]) -> dict:
+    PAROLE_TRUFFA = ("iban", "coordinate bancarie", "password", "inoltra", "sblocca")
+
+    def decidi(self, stato: str, domande: list[dict], facoltative=frozenset()) -> dict:
         if self.giu:
             raise DecisoreNonDisponibile("giù")
         self.chiamate.append((stato, [d["id"] for d in domande]))
@@ -86,9 +91,17 @@ class DecisoreFinto:
                 scelta = "si" if "?" in stato else "no"
             elif d["id"] == "urgenza":
                 scelta = "alta" if "urgente" in stato.lower() else "normale"
+            elif d["id"] == "truffa":
+                if self.truffa == "manca":
+                    continue
+                if isinstance(self.truffa, float):
+                    risposte["truffa"] = {"scelta": "si" if self.truffa >= 0.5 else "no",
+                                          "probabilita": {"si": self.truffa, "no": round(1 - self.truffa, 4)}}
+                    continue
+                scelta = "si" if any(p in stato.lower() for p in self.PAROLE_TRUFFA) else "no"
             else:
                 scelta = opzioni[0]
-            p = self.sicurezza if d["id"] == "gruppo" else (0.5 if self.incerto else 0.9)
+            p = self.sicurezza if d["id"] == "gruppo" else (0.5 if self.incerto and d["id"] != "truffa" else 0.9)
             resto = (1 - p) / max(1, len(opzioni) - 1)
             risposte[d["id"]] = {"scelta": scelta, "probabilita": {o: (p if o == scelta else resto) for o in opzioni}}
         return risposte

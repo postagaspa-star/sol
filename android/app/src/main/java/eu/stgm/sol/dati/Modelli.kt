@@ -229,8 +229,14 @@ data class Mail(
     val probabilita: JsonObject? = null,
     /** La busta della PEC (15.8): [mittente] e [oggetto] sono quelli della mail interna. */
     val pec: Pec? = null,
+    /** 16.2: Sol pensa che possa essere un tentativo di truffa (IBAN nuovo, documenti, password...). */
+    val sospetta: Boolean = false,
 ) {
     val urgente: Boolean get() = urgenza == URGENZA_ALTA
+
+    /** 16.2: quanto Sol crede che sia una truffa (`probabilita.truffa.si`), solo nel dettaglio. */
+    val probabilitaTruffa: Double?
+        get() = ((probabilita?.get("truffa") as? JsonObject)?.get("si") as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
     val daControllare: Boolean get() = smistamento == SMISTAMENTO_DA_CONTROLLARE
     /** Una bozza pronta conta solo se a quella mail non hai già risposto (anche da Outlook). */
     val bozzaPronta: Boolean get() = bozza?.stato == Bozza.PRONTA && !rispostaData
@@ -394,7 +400,14 @@ data class ImpostazioniSol(
     val tono: String = "",
     val scrittori: List<String> = emptyList(),
     val conservaGiorni: Int = 180,
-)
+    /** 16.2: da questa probabilità in su una mail è "possibile truffa" (tra 0,2 e 0,9). */
+    val sogliaTruffa: Double = 0.5,
+) {
+    companion object {
+        const val SOGLIA_TRUFFA_MINIMA = 0.2
+        const val SOGLIA_TRUFFA_MASSIMA = 0.9
+    }
+}
 
 // --- Novità (notifiche) ----------------------------------------------------------
 
@@ -424,6 +437,8 @@ data class Conteggi(
     val daControllare: Int = 0,
     val daLeggere: Int = 0,
     val bozzePronte: Int = 0,
+    /** 16.2: le mail segnalate come possibile truffa e non ancora chiarite. */
+    val sospette: Int = 0,
     /** Chiave: id del gruppo, come testo (JSON non ha chiavi numeriche). */
     val gruppi: Map<String, ConteggioGruppo> = emptyMap(),
 )

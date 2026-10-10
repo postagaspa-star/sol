@@ -31,6 +31,8 @@ data class RichiestaConferma(
     val primaRiga: String,
     /** A quella mail Manuel ha già risposto da un altro programma (15.13). */
     val giaRisposto: Boolean = false,
+    /** La mail a cui si risponde è segnalata come possibile truffa (16.3). */
+    val sospetta: Boolean = false,
     /** Il server ha detto che nel frattempo era cambiata: questa è la versione nuova. */
     val cambiata: Boolean = false,
 )
@@ -393,16 +395,24 @@ class GestoreBozza(
                 _stato.update { it.copy(preparazioneConferma = false, confermaInvio = null, errore = problema) }
                 return@launch
             }
-            val giaRisposto = fresca.tipo == "risposta" && fresca.mailId?.let { id ->
-                (client.dettaglioMail(id) as? Esito.Ok)?.dato?.rispostaData
-            } == true
-            val conferma = confermaDa(fresca, giaRisposto, cambiata || (precedente != null && precedente.versione != fresca.versione))
+            // La mail a cui si risponde, riletta: già risposta da un altro programma? possibile truffa?
+            val mail = if (fresca.tipo == "risposta") {
+                fresca.mailId?.let { id -> (client.dettaglioMail(id) as? Esito.Ok)?.dato }
+            } else {
+                null
+            }
+            val conferma = confermaDa(
+                fresca,
+                giaRisposto = mail?.rispostaData == true,
+                sospetta = mail?.sospetta == true,
+                cambiata = cambiata || (precedente != null && precedente.versione != fresca.versione),
+            )
             memoria.scrivi(CHIAVE_CONFERMA, bozzaId.toString())
             _stato.update { it.copy(preparazioneConferma = false, confermaInvio = conferma) }
         }
     }
 
-    private fun confermaDa(b: Bozza, giaRisposto: Boolean, cambiata: Boolean) = RichiestaConferma(
+    private fun confermaDa(b: Bozza, giaRisposto: Boolean, sospetta: Boolean, cambiata: Boolean) = RichiestaConferma(
         bozzaId = b.id,
         versione = b.versione ?: 0,
         a = b.a,
@@ -410,6 +420,7 @@ class GestoreBozza(
         oggetto = b.oggetto,
         primaRiga = b.primaRiga,
         giaRisposto = giaRisposto,
+        sospetta = sospetta,
         cambiata = cambiata,
     )
 
@@ -473,7 +484,7 @@ class GestoreBozza(
                     it.copy(
                         bozza = nuova,
                         inCorso = false,
-                        confermaInvio = confermaDa(nuova, conferma.giaRisposto, cambiata = true),
+                        confermaInvio = confermaDa(nuova, conferma.giaRisposto, conferma.sospetta, cambiata = true),
                     )
                 }
                 memoria.scrivi(CHIAVE_CONFERMA, nuova.id.toString())

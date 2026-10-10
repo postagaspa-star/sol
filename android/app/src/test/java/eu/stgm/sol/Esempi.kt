@@ -58,6 +58,25 @@ object Esempi {
     /** La mail di Rossi, già risposta da un altro programma (15.13). */
     val DETTAGLIO_GIA_RISPOSTA = DETTAGLIO.replace("\"risposta_data\": false", "\"risposta_data\": true")
 
+    /** 16.2: "Bianchi" chiede di pagare su un IBAN nuovo, da un indirizzo strano. Tutto inventato. */
+    const val MAIL_SOSPETTA = """{
+      "id": 820, "casella_id": 1, "casella": "studio@esempio.it",
+      "mittente": {"nome": "Luca Bianchi", "indirizzo": "bianchi.amministrazione@esempio-pagamenti.it"},
+      "oggetto": "Nuove coordinate bancarie", "anteprima": "Da oggi i pagamenti vanno sul nuovo IBAN",
+      "riassunto": "Bianchi chiede di pagare la fattura su un IBAN nuovo, con urgenza.",
+      "ricevuta_il": "2026-10-10T09:05:00+02:00",
+      "letta": false, "risposta_data": false, "gruppo_id": 2, "gruppo": "Fornitori",
+      "da_rispondere": false, "urgenza": "alta", "sicurezza": 0.91,
+      "smistamento": "da_controllare", "origine_smistamento": "regola",
+      "applicata_in_casella": false, "bozza": null, "allegati": [], "sospetta": true
+    }"""
+
+    val DETTAGLIO_SOSPETTO = MAIL_SOSPETTA.trimEnd().removeSuffix("}") + """,
+      "destinatari": ["studio@esempio.it"], "cc": [],
+      "corpo": "Buongiorno,\nda oggi i pagamenti vanno sul nuovo IBAN. Serve entro oggi.\nLuca Bianchi",
+      "probabilita": {"gruppo": {"Fornitori": 0.91}, "truffa": {"si": 0.82, "no": 0.18}}
+    }"""
+
     const val GRUPPI = """[
       {"id": 1, "nome": "Clienti", "ordine": 1, "cartella": "Sol/Clienti", "da_leggere": 4, "totale": 120},
       {"id": 2, "nome": "Fornitori", "ordine": 2, "cartella": "Sol/Fornitori", "da_leggere": 0, "totale": 40},

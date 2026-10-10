@@ -82,6 +82,8 @@ FRASI_CAMPI = {
     "dal": "Il cursore delle novità non va bene: richiedi le novità senza cursore.",
     "ordine": "La posizione del gruppo deve essere un numero tra 0 e 1000.",
     "mail_id": "La mail indicata non va bene.",
+    "soglia_truffa": "La soglia per le possibili truffe deve essere un numero tra 0,2 e 0,9.",
+    "sospetta": "Va indicato se la mail è una possibile truffa o no.",
 }
 
 

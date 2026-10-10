@@ -13,12 +13,24 @@ public static class ConfermaInvio
     public const string PulsanteInvia = "Invia";
     public const string PulsanteAnnulla = "Non inviare";
     public const string AvvisoGiaRisposto = "Hai già risposto a questa mail da un altro programma: vuoi mandare anche questa?";
+    public const string AvvisoTruffa = "Stai rispondendo a una mail segnalata come possibile truffa";
+    public const string PulsanteInviaLoStesso = "Invia lo stesso";
 
-    public static string TitoloPer(AnteprimaInvio a) => a.Tipo == "sollecito" ? TitoloSollecito : Titolo;
+    /// <summary>Il titolo: per una risposta a una possibile truffa è l'avviso stesso (in rosso nella finestra).</summary>
+    public static string TitoloPer(AnteprimaInvio a) => a.Sospetta ? AvvisoTruffa : a.Tipo == "sollecito" ? TitoloSollecito : Titolo;
+
+    /// <summary>"Invia lo stesso" se si risponde a una possibile truffa (§16.3), altrimenti "Invia".</summary>
+    public static string PulsantePer(AnteprimaInvio a) => a.Sospetta ? PulsanteInviaLoStesso : PulsanteInvia;
 
     public static string Testo(AnteprimaInvio a)
     {
         var t = new StringBuilder();
+        if (a.Sospetta)
+        {
+            // L'avviso c'è anche nel testo, non solo nel colore: si legge comunque.
+            t.AppendLine(AvvisoTruffa + ". Se ti chiede soldi, coordinate bancarie o documenti, prima telefona al mittente a un numero che conosci già.")
+                .AppendLine();
+        }
         if (a.GiaRisposto) t.AppendLine(AvvisoGiaRisposto).AppendLine();
         if (a.Tipo == "sollecito" && !string.IsNullOrWhiteSpace(a.SollecitoPer)) t.Append("Sollecito per: ").AppendLine(a.SollecitoPer.Trim()).AppendLine();
         t.Append("A: ").AppendLine(Elenco(a.A));

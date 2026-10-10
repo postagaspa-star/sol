@@ -34,6 +34,8 @@ IMPOSTAZIONI_INIZIALI = {
     "tono": "cortese e diretto",
     "scrittori": ["groq", "cerebras", "locale"],
     "conserva_giorni": 180,
+    # v1.2 (contratto 16.2): da questa probabilità di "si" la mail è una possibile truffa.
+    "soglia_truffa": 0.5,
 }
 
 SCHEMA_1 = """
@@ -286,11 +288,28 @@ def _semina_2(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE mail SET applica = 0")
 
 
+# v1.2 (contratto 16): possibile truffa.
+# sospetta: l'etichetta rossa; sospetta_utente: la decisione dell'utente (NULL = nessuna),
+# che vale sopra quella del decisore; truffa_valutata: la quarta domanda è stata fatta.
+SCHEMA_3 = """
+ALTER TABLE mail ADD COLUMN sospetta INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail ADD COLUMN sospetta_utente INTEGER;
+ALTER TABLE mail ADD COLUMN truffa_valutata INTEGER NOT NULL DEFAULT 0
+"""
+
+
+def _semina_3(conn: sqlite3.Connection) -> None:
+    # Le mail già valutate prima della v1.2 non si rimandano al decisore (sono ore di lavoro
+    # sul NAS): la domanda sulla truffa vale per le mail che arrivano da ora in poi.
+    conn.execute("UPDATE mail SET truffa_valutata = 1 WHERE smistamento != 'in_attesa' AND da_rispondere IS NOT NULL")
+
+
 # Migrazioni: (versione, sql, funzione di semina o None). Si aggiunge in fondo,
 # mai si modifica una già rilasciata: un database vecchio le fa tutte in ordine.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
     (2, SCHEMA_2, _semina_2),
+    (3, SCHEMA_3, _semina_3),
 ]
 
 

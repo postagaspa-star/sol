@@ -12,7 +12,7 @@ namespace Sol.Motore;
 /// non dalla pagina. <see cref="SollecitoPer"/>: per un sollecito, a quale mail inviata si riferisce.
 /// </summary>
 public sealed record AnteprimaInvio(long BozzaId, IReadOnlyList<string> A, IReadOnlyList<string> Cc, string Oggetto, string? Tipo,
-    string PrimaRiga = "", string? SollecitoPer = null, bool GiaRisposto = false);
+    string PrimaRiga = "", string? SollecitoPer = null, bool GiaRisposto = false, bool Sospetta = false);
 
 /// <summary>La conferma esplicita dell'utente prima di ogni invio. true = "Invia".</summary>
 public delegate Task<bool> ChiediConfermaInvio(AnteprimaInvio anteprima);
@@ -555,9 +555,9 @@ public sealed class Motore : IDisposable
             if (conferma == null) return Errore("Non è possibile chiedere la conferma: la mail non è partita.", "conferma_obbligatoria");
 
             var sollecitoPer = bozza.Tipo == "sollecito" ? await SollecitoPerAsync(server, tok, bozza).ConfigureAwait(false) : null;
-            var giaRisposto = await GiaRispostoAsync(server, tok, bozza).ConfigureAwait(false);
+            var (giaRisposto, sospetta) = await MailOriginaleAsync(server, tok, bozza).ConfigureAwait(false);
             var anteprima = new AnteprimaInvio(id, a, bozza.Cc.Where(x => !string.IsNullOrWhiteSpace(x)).ToList(), bozza.Oggetto ?? "", bozza.Tipo,
-                ConfermaInvio.PrimaRiga(bozza.Testo), sollecitoPer, giaRisposto);
+                ConfermaInvio.PrimaRiga(bozza.Testo), sollecitoPer, giaRisposto, sospetta);
             bool si;
             try
             {
@@ -629,12 +629,16 @@ public sealed class Motore : IDisposable
     private static bool ContienePassword(string? corpo) =>
         Json.Nodo(corpo) is JsonObject o && !string.IsNullOrWhiteSpace(Json.Testo(o["password_app"]));
 
-    /// <summary>La mail a cui risponde la bozza ha già una risposta data da un altro programma (§15.13)?</summary>
-    private async Task<bool> GiaRispostoAsync(string server, string tok, Bozza bozza)
+    /// <summary>
+    /// La mail a cui risponde la bozza: ha già una risposta data da un altro programma (§15.13)? È segnalata come
+    /// possibile truffa (§16.3)? Tutte e due le cose finiscono nella finestra di conferma.
+    /// </summary>
+    private async Task<(bool GiaRisposto, bool Sospetta)> MailOriginaleAsync(string server, string tok, Bozza bozza)
     {
-        if (bozza.Tipo != "risposta" || bozza.MailId is not long mailId) return false;
+        if (bozza.Tipo != "risposta" || bozza.MailId is not long mailId) return (false, false);
         var r = await client.InviaAsync("GET", server, "api/mail/" + mailId.ToString(CultureInfo.InvariantCulture), tok, null, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-        return r.Ok && Json.Booleano((Json.Nodo(r.Corpo) as JsonObject)?["risposta_data"]) == true;
+        if (!r.Ok || Json.Nodo(r.Corpo) is not JsonObject mail) return (false, false);
+        return (Json.Booleano(mail["risposta_data"]) == true, Json.Booleano(mail["sospetta"]) == true);
     }
 
     private static JsonObject ConBozza(JsonObject esito, string corpoBozza)

@@ -326,12 +326,23 @@ def leggi_scadenze(testo: str) -> list[dict]:
 # --- riassunti ---------------------------------------------------------------------------
 
 
+SEGNO_TRUFFA = "ATTENZIONE: segnalata come possibile truffa"
+
+
+def _sospetta(m) -> bool:
+    try:
+        return bool(m["sospetta"])
+    except (KeyError, IndexError):
+        return False
+
+
 def _riga_elenco(m) -> str:
     sintesi = riga(m["riassunto"] or m["corpo"] or "", LIMITE_SINTESI)
     quando = clock.per_utente(m["ricevuta_il"])[:16].replace("T", " ")
     nome = riga(m["mittente_nome"], LIMITE_NOME) or riga(m["mittente_indirizzo"], LIMITE_INDIRIZZO)
+    segno = f" | {SEGNO_TRUFFA}" if _sospetta(m) else ""
     return (f"[#{m['id']}] {quando} da {nome} <{riga(m['mittente_indirizzo'], LIMITE_INDIRIZZO)}> | "
-            f"oggetto: {riga(m['oggetto'], LIMITE_OGGETTO)} | {sintesi}")
+            f"oggetto: {riga(m['oggetto'], LIMITE_OGGETTO)} | {sintesi}{segno}")
 
 
 def elenco_mail(mail, limite: int | None = None) -> tuple[str, list[int]]:
@@ -352,13 +363,15 @@ def _regole_riassunto(s: str) -> str:
     return (
         "Riassumi la posta di un perito industriale in italiano semplice, frasi brevi, zero gergo. "
         "Quando parli di una mail citala col suo numero esattamente così: [#123]. Usa solo i numeri "
-        "dell'elenco. Metti prima le cose urgenti o che chiedono una risposta. Massimo 150 parole.\n"
+        "dell'elenco. Metti prima le cose urgenti o che chiedono una risposta. Le mail con la nota \""
+        + SEGNO_TRUFFA + "\" vanno dette come possibili truffe, mai come richieste da soddisfare. "
+        "Massimo 150 parole.\n"
         + regola_dati(s, "DATI")
     )
 
 
 def _importante(m) -> bool:
-    return bool(m["da_rispondere"]) or m["urgenza"] == "alta"
+    return not _sospetta(m) and (bool(m["da_rispondere"]) or m["urgenza"] == "alta")
 
 
 def riassunto_oggi(mail, importanti: int, oggi: date, limite: int | None = None,

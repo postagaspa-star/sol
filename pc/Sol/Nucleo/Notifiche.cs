@@ -44,8 +44,9 @@ public static class Notificatore
             return esito;
         }
 
+        // Una possibile truffa non suona mai come "urgente" (§16.2): la sua urgenza è proprio l'esca.
         var urgenti = novita.Urgenti
-            .Where(m => !m.Letta && !stato.UrgentiMostrate.Contains(m.Id))
+            .Where(m => !m.Letta && !m.Sospetta && !stato.UrgentiMostrate.Contains(m.Id))
             .GroupBy(m => m.Id).Select(g => g.First())
             .ToList();
         if (urgenti.Count > MassimoSingole)

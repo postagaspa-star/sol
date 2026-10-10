@@ -27,8 +27,11 @@ sezioni 13 e 15.14.
 4. `/genera` usa **lo stesso contesto llama.cpp** (nessun secondo modello in memoria).
 
 All'avvio il decisore prepara la testa delle **domande consigliate**
-(`app/domande_consigliate.json`): se il server di Sol manda esattamente quei testi, nessuna
-mail paga la preparazione (~40 s sul NAS).
+(`app/domande_consigliate.json`: `gruppo`, `da_rispondere`, `urgenza`, `truffa`, in quest'ordine)
+e quella delle stesse senza `gruppo` (quando il gruppo l'ha già deciso una regola): se il server
+di Sol manda esattamente quei testi, nessuna mail paga la preparazione (~45 s sul NAS). La quarta
+domanda, "possibile truffa" (contratto 16), nello stile `insieme` costa solo la lettura di una
+risposta in più (`4: A`).
 
 ## Testi che arrivano da fuori (mail, domande, opzioni, messaggi)
 

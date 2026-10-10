@@ -89,10 +89,14 @@ def conteggi(conn: sqlite3.Connection = Depends(get_conn)):
         )
     }
     return {
-        "da_rispondere": numero("SELECT COUNT(*) FROM mail WHERE da_rispondere = 1 AND risposta_data = 0"),
-        "urgenti": numero(
-            "SELECT COUNT(*) FROM mail WHERE urgenza = 'alta' AND (letta = 0 OR (da_rispondere = 1 AND risposta_data = 0))"
+        "da_rispondere": numero(
+            "SELECT COUNT(*) FROM mail WHERE da_rispondere = 1 AND risposta_data = 0 AND sospetta = 0"
         ),
+        "urgenti": numero(
+            "SELECT COUNT(*) FROM mail WHERE urgenza = 'alta' AND sospetta = 0"
+            " AND (letta = 0 OR (da_rispondere = 1 AND risposta_data = 0))"
+        ),
+        "sospette": numero("SELECT COUNT(*) FROM mail WHERE sospetta = 1"),  # 16.2: non ancora chiarite
         "da_controllare": numero("SELECT COUNT(*) FROM mail WHERE smistamento = 'da_controllare'"),
         "da_leggere": numero("SELECT COUNT(*) FROM mail WHERE letta = 0"),
         "bozze_pronte": numero("SELECT COUNT(*) FROM bozze WHERE stato = 'pronta'"),
@@ -111,7 +115,8 @@ def novita(dal: str | None = None, conn: sqlite3.Connection = Depends(get_conn))
         raise non_valido("Il cursore delle novità non va bene: richiedi le novità senza cursore.", campo="dal")
     dal_n = int(dal)
     urgenti = conn.execute(
-        forme.SELECT_MAIL + " WHERE m.seq_valutata > ? AND m.urgenza = 'alta' ORDER BY m.ricevuta_il DESC LIMIT 20",
+        forme.SELECT_MAIL + " WHERE m.seq_valutata > ? AND m.urgenza = 'alta' AND m.sospetta = 0"
+        " ORDER BY m.ricevuta_il DESC LIMIT 20",
         (dal_n,),
     ).fetchall()
     domani = (clock.oggi() + timedelta(days=1)).isoformat()
@@ -119,7 +124,7 @@ def novita(dal: str | None = None, conn: sqlite3.Connection = Depends(get_conn))
         "cursore": str(cursore),
         "urgenti": forme.mail_lista(conn, urgenti),
         "da_rispondere_nuove": conn.execute(
-            "SELECT COUNT(*) FROM mail WHERE seq_valutata > ? AND da_rispondere = 1", (dal_n,)
+            "SELECT COUNT(*) FROM mail WHERE seq_valutata > ? AND da_rispondere = 1 AND sospetta = 0", (dal_n,)
         ).fetchone()[0],
         # 15.6 e 15.13: bozze_pronte è il totale; per notificare si usa solo bozze_nuove.
         "bozze_pronte": conn.execute("SELECT COUNT(*) FROM bozze WHERE stato = 'pronta'").fetchone()[0],

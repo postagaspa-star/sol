@@ -48,8 +48,15 @@ data class StatoPosta(
             FiltroRapido.DA_RISPONDERE -> it.daRispondere
             FiltroRapido.URGENTI -> it.urgenti
             FiltroRapido.DA_CONTROLLARE -> it.daControllare
+            FiltroRapido.SOSPETTE -> it.sospette
         }
     }
+
+    /**
+     * 16.3: il filtro "Possibili truffe" si vede solo quando ce n'è almeno una da
+     * chiarire (o se è già scelto, per poterlo togliere).
+     */
+    val filtroTruffeVisibile: Boolean get() = (conteggi?.sospette ?: 0) > 0 || filtro == FiltroRapido.SOSPETTE
 
     /** Le mail da leggere di un gruppo: dai conteggi se ci sono, altrimenti dall'elenco dei gruppi. */
     fun daLeggere(gruppo: Gruppo): Int = conteggi?.gruppi?.get(gruppo.id.toString())?.daLeggere ?: gruppo.daLeggere

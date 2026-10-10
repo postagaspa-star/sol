@@ -16,13 +16,22 @@ def test_da_v1_a_v1_1(tmp_path, monkeypatch):
             "INSERT INTO mail (casella_id, id_esterno, oggetto, ricevuta_il, smistamento, gruppo_id)"
             " VALUES (1, 'a', 'Vecchia', '2026-10-02T00:00:00+00:00', 'smistata', 1)"
         )
+        conn.execute(
+            "INSERT INTO mail (casella_id, id_esterno, oggetto, ricevuta_il, smistamento, gruppo_id, da_rispondere)"
+            " VALUES (1, 'b', 'Già valutata', '2026-10-02T00:00:00+00:00', 'smistata', 1, 0)"
+        )
     monkeypatch.undo()
     db.init_db(percorso)
     db.init_db(percorso)  # una seconda volta non fa niente
     with db.aperta(percorso) as conn:
-        assert [r[0] for r in conn.execute("SELECT versione FROM versione_schema ORDER BY versione")] == [1, 2]
-        m = conn.execute("SELECT oggetto, applica, incerti, automatica FROM mail").fetchone()
-        assert tuple(m) == ("Vecchia", 0, "[]", 0)  # l'arretrato non si sposta da solo
+        assert [r[0] for r in conn.execute("SELECT versione FROM versione_schema ORDER BY versione")] == [1, 2, 3]
+        m = conn.execute("SELECT oggetto, applica, incerti, automatica, sospetta, sospetta_utente FROM mail"
+                         " WHERE id_esterno = 'a'").fetchone()
+        assert tuple(m) == ("Vecchia", 0, "[]", 0, 0, None)  # l'arretrato non si sposta da solo
+        # La mail non ancora valutata del tutto riceverà anche la domanda sulla truffa.
+        assert conn.execute("SELECT truffa_valutata FROM mail WHERE id_esterno = 'a'").fetchone()[0] == 0
+        # Quelle già valutate prima della v1.2 non tornano al decisore (ore di lavoro sul NAS).
+        assert conn.execute("SELECT truffa_valutata FROM mail WHERE id_esterno = 'b'").fetchone()[0] == 1
         clienti = conn.execute("SELECT descrizione FROM gruppi WHERE chiave = 'clienti'").fetchone()[0]
         assert clienti == db.DESCRIZIONI_2["clienti"]
         assert conn.execute("SELECT versione FROM bozze").fetchall() == []

@@ -113,6 +113,10 @@ data class ColoriSegni(
     val bozzaTesto: Color,
     val controllareFondo: Color,
     val controllareTesto: Color,
+    /** L'avviso "possibile truffa": chiaro ma calmo, anche col tema scuro (niente rosso pieno). */
+    val truffaFondo: Color,
+    val truffaTesto: Color,
+    val truffaIcona: Color,
 )
 
 private val SegniChiaro = ColoriSegni(
@@ -120,6 +124,7 @@ private val SegniChiaro = ColoriSegni(
     rispondereFondo = Color(0xFFD6E2F0), rispondereTesto = Color(0xFF0E2239),
     bozzaFondo = Color(0xFFD5EBDD), bozzaTesto = Color(0xFF0D3A20),
     controllareFondo = Color(0xFFF6E3B5), controllareTesto = Color(0xFF2B1F00),
+    truffaFondo = Color(0xFFF9DEDC), truffaTesto = Color(0xFF410E0B), truffaIcona = Color(0xFFB3261E),
 )
 
 private val SegniScuro = ColoriSegni(
@@ -127,6 +132,7 @@ private val SegniScuro = ColoriSegni(
     rispondereFondo = Color(0xFF284360), rispondereTesto = Color(0xFFD8E5F5),
     bozzaFondo = Color(0xFF1F4D33), bozzaTesto = Color(0xFFD2F0DD),
     controllareFondo = Color(0xFF574000), controllareTesto = Color(0xFFFBE6B6),
+    truffaFondo = Color(0xFF3A2321), truffaTesto = Color(0xFFF5DDDA), truffaIcona = Color(0xFFFFB4AB),
 )
 
 val LocalSegni = staticCompositionLocalOf { SegniChiaro }

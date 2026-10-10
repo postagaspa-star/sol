@@ -1,12 +1,14 @@
 package eu.stgm.sol.ui.dettaglio
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -15,6 +17,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,12 +46,14 @@ import eu.stgm.sol.dati.Gruppo
 import eu.stgm.sol.dati.Mail
 import eu.stgm.sol.ui.AvvisoLettura
 import eu.stgm.sol.ui.BarraCaricamento
+import eu.stgm.sol.ui.DialogoConferma
 import eu.stgm.sol.ui.DialogoErrore
 import eu.stgm.sol.ui.FilaPulsanti
 import eu.stgm.sol.ui.PulsantePieno
 import eu.stgm.sol.ui.PulsanteTesto
 import eu.stgm.sol.ui.PulsanteVuoto
 import eu.stgm.sol.ui.Riquadro
+import eu.stgm.sol.ui.RiquadroTruffa
 import eu.stgm.sol.ui.Rotella
 import eu.stgm.sol.ui.Segno
 import eu.stgm.sol.ui.TipoSegno
@@ -63,6 +68,7 @@ fun DettaglioScreen(vm: DettaglioViewModel, mailId: Long, onIndietro: () -> Unit
     val stato by vm.stato.collectAsStateWithLifecycle()
     val messaggi = LocalMessaggi.current
     var mostraSposta by rememberSaveable { mutableStateOf(false) }
+    var chiediNonETruffa by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(mailId) {
         vm.apri(mailId)
@@ -95,6 +101,9 @@ fun DettaglioScreen(vm: DettaglioViewModel, mailId: Long, onIndietro: () -> Unit
             if (mail == null) {
                 if (stato.caricamento) Rotella()
             } else {
+                if (mail.sospetta) {
+                    AvvisoTruffa(inCorso = stato.inCorso, onNonETruffa = { chiediNonETruffa = true })
+                }
                 Intestazione(mail)
                 Gruppo(
                     mail = mail,
@@ -115,6 +124,10 @@ fun DettaglioScreen(vm: DettaglioViewModel, mailId: Long, onIndietro: () -> Unit
                             vm::cambiaDaRispondere,
                             abilitato = !stato.inCorso,
                         )
+                    }
+                    // 16.3: meno in vista delle altre azioni, ma sempre a portata.
+                    if (!mail.sospetta) {
+                        PulsanteTesto("Segnala come possibile truffa", vm::segnalaTruffa, abilitato = !stato.inCorso)
                     }
                 }
                 TitoloSezione("Testo")
@@ -148,6 +161,19 @@ fun DettaglioScreen(vm: DettaglioViewModel, mailId: Long, onIndietro: () -> Unit
     }
 
     DialogoErrore(stato.erroreAzione, vm::consumaErroreAzione)
+    if (chiediNonETruffa) {
+        DialogoConferma(
+            titolo = "Non è una truffa?",
+            testo = "Sol la tratterà come una mail normale e, se va risposta, preparerà la bozza. " +
+                "Fallo solo se sei sicuro, per esempio dopo aver telefonato al mittente.",
+            conferma = "Sì, è a posto",
+            onConferma = {
+                chiediNonETruffa = false
+                vm.nonETruffa()
+            },
+            onAnnulla = { chiediNonETruffa = false },
+        )
+    }
     val mail = stato.mail
     if (mostraSposta && mail != null) {
         DialogoSposta(
@@ -200,6 +226,7 @@ private fun Intestazione(mail: Mail) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     val segni = buildList {
+        if (mail.sospetta) add(TipoSegno.TRUFFA)
         if (mail.urgente) add(TipoSegno.URGENTE)
         if (mail.daRispondere && !mail.rispostaData) add(TipoSegno.DA_RISPONDERE)
         if (mail.bozzaPronta) add(TipoSegno.BOZZA_PRONTA)
@@ -233,6 +260,24 @@ private fun Intestazione(mail: Mail) {
     }
 }
 
+/** Il testo del contratto (16.3): cosa fare prima di pagare o mandare documenti. */
+const val AVVISO_TRUFFA =
+    "Attenzione: questa mail potrebbe essere una truffa. Prima di pagare, cambiare coordinate bancarie o " +
+        "mandare documenti, telefona al mittente a un numero che conosci già, non a quello scritto nella mail."
+
+/**
+ * In cima al dettaglio di una mail sospetta: chiaro e ben visibile, ma con i colori
+ * degli avvisi dell'app, non da allarme. Il pulsante resta pieno e leggibile.
+ */
+@Composable
+private fun AvvisoTruffa(inCorso: Boolean, onNonETruffa: () -> Unit) {
+    RiquadroTruffa(AVVISO_TRUFFA, Modifier.padding(bottom = 12.dp)) {
+        Box(Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.CenterEnd) {
+            PulsanteVuoto("Non è una truffa", onNonETruffa, abilitato = !inCorso)
+        }
+    }
+}
+
 /** Da dove viene il gruppo, detto semplice. */
 private fun origine(mail: Mail): String = when (mail.origineSmistamento) {
     "regola" -> "Scelto da una regola."
@@ -253,7 +298,13 @@ private fun Gruppo(mail: Mail, modalitaProva: Boolean, inCorso: Boolean, onSpost
             origine(mail).takeIf { it.isNotBlank() }?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (mail.daControllare) {
+            if (mail.sospetta) {
+                Text(
+                    "È tra quelle da controllare perché potrebbe essere una truffa.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            } else if (mail.daControllare) {
                 Text(
                     "Sol non è sicuro: controlla se il gruppo va bene.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -269,7 +320,8 @@ private fun Gruppo(mail: Mail, modalitaProva: Boolean, inCorso: Boolean, onSpost
                 )
             }
             FilaPulsanti(Modifier.padding(top = 8.dp)) {
-                if (mail.daControllare) PulsantePieno("Va bene così", onVaBene, abilitato = !inCorso)
+                // Su una possibile truffa il gesto giusto è "Non è una truffa", in cima.
+                if (mail.daControllare && !mail.sospetta) PulsantePieno("Va bene così", onVaBene, abilitato = !inCorso)
                 PulsanteVuoto("Sposta in...", onSposta, abilitato = !inCorso)
             }
         }

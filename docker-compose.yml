@@ -3,9 +3,11 @@
 # Tre container:
 #   sol            -> il server: legge le caselle, smista, prepara bozze e riassunti
 #   sol-decisore   -> SemIf + Qwen3.5-4B sul processore del NAS: sceglie i gruppi
-#   sol-tailscale  -> indirizzo https fisso RAGGIUNGIBILE SOLO dai dispositivi della
-#                     rete Tailscale di casa (Serve, non Funnel): sono mail di lavoro,
-#                     da internet non si deve nemmeno vedere che il server esiste.
+#   sol-tailscale  -> indirizzo https fisso e pubblico (Tailscale Funnel, come Pactum), cosi'
+#                     telefono e PC funzionano installando solo l'app, senza Tailscale sui
+#                     dispositivi. Scelta di Andrea (10/10/2026) dopo aver pesato la versione
+#                     privata: ogni richiesta chiede comunque il codice del dispositivo, e
+#                     l'abbinamento si blocca dopo 10 tentativi sbagliati.
 #
 # Le chiavi (SOL_CHIAVE, SOL_GROQ_KEY, SOL_CEREBRAS_KEY, SOL_MS_CLIENT_ID, TS_AUTHKEY)
 # stanno in server/.env, che non va mai nel repo.

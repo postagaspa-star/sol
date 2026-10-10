@@ -211,3 +211,9 @@ test('api.js: l\'abbinamento aspetta almeno 30 secondi, l\'invio non ha limite d
   api.get('/locale/stato');
   assert.equal(attese.pop(), 10000);
 });
+
+test('filtro "Possibili truffe" (§16)', () => {
+  assert.equal(L.queryPosta({ tipo: 'truffe' }, '', null, 50), '?sospetta=true&limite=50');
+  assert.deepEqual(L.destinazioneDaFrammento('#truffe'), { vista: 'posta', filtro: { tipo: 'truffe' }, mailId: null });
+  assert.equal(L.FILTRI.truffe.titolo, 'Possibili truffe');
+});

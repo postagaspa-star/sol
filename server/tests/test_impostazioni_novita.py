@@ -5,7 +5,7 @@ def test_impostazioni_iniziali(client, auth):
     assert client.get("/api/impostazioni", headers=auth).json() == {
         "modalita_prova": True, "soglia_sicurezza": 0.85, "giorni_risposta": 2, "giorni_sollecito": 7,
         "intervallo_controllo_minuti": 5, "firma": "Cordiali saluti\nManuel", "tono": "cortese e diretto",
-        "scrittori": ["groq", "cerebras", "locale"], "conserva_giorni": 180,
+        "scrittori": ["groq", "cerebras", "locale"], "conserva_giorni": 180, "soglia_truffa": 0.5,
     }
 
 
@@ -40,7 +40,8 @@ def test_novita(client, auth, finta, servizi, orologio):
     smista_tutto(servizi)
     scrivi_tutto(servizi)
     dopo = client.get(f"/api/novita?dal={primo['cursore']}", headers=auth).json()
-    assert {m["oggetto"] for m in dopo["urgenti"]} == {"Sopralluogo urgente quadro elettrico", "URGENTE: inoltro fatture"}
+    # La mail-trappola è urgente ma è una possibile truffa: niente notifica (contratto 16.2).
+    assert {m["oggetto"] for m in dopo["urgenti"]} == {"Sopralluogo urgente quadro elettrico"}
     assert dopo["da_rispondere_nuove"] >= 2
     pronte = client.get("/api/bozze?stato=pronta", headers=auth).json()
     assert dopo["bozze_pronte"] == len(pronte) >= 2

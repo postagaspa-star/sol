@@ -387,7 +387,7 @@ class Lavoro:
         with db.aperta(self.db_path) as conn:
             imp = db.impostazioni(conn)
             m = conn.execute(
-                "SELECT * FROM mail WHERE (smistamento = 'in_attesa' OR da_rispondere IS NULL)"
+                "SELECT * FROM mail WHERE (smistamento = 'in_attesa' OR da_rispondere IS NULL OR truffa_valutata = 0)"
                 " AND tentativi_decisore < ? ORDER BY ricevuta_il DESC, id DESC LIMIT 1",
                 (TENTATIVI_DECISORE,),
             ).fetchone()
@@ -470,7 +470,7 @@ class Lavoro:
         # da_controllare (anche se proposta come newsletter) può essere una richiesta vera.
         m = conn.execute(
             "SELECT m.* FROM mail m LEFT JOIN gruppi g ON g.id = m.gruppo_id"
-            " WHERE m.scadenze_fatte = 0 AND (m.smistamento = 'da_controllare'"
+            " WHERE m.scadenze_fatte = 0 AND m.sospetta = 0 AND (m.smistamento = 'da_controllare'"
             " OR (m.smistamento IN ('smistata', 'corretta') AND (g.chiave IS NULL OR g.chiave != 'newsletter')))"
             " AND (m.prossimo_scadenze IS NULL OR m.prossimo_scadenze <= ?) ORDER BY m.ricevuta_il DESC LIMIT 1",
             (ora,),
@@ -665,7 +665,7 @@ class Lavoro:
         if not mail:
             testo, citate = "Oggi non è arrivata nessuna mail.", []
         else:
-            importanti = sum(1 for m in mail if m["da_rispondere"] or m["urgenza"] == "alta")
+            importanti = sum(1 for m in mail if not m["sospetta"] and (m["da_rispondere"] or m["urgenza"] == "alta"))
             if not r["testo"] or r["giorno"] != oggi.isoformat():
                 conn.execute("UPDATE riassunto_oggi SET stato = 'in_corso' WHERE id = 1")
             incluse: list[int] = []

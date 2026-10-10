@@ -22,10 +22,10 @@ def test_spenta_la_prova_l_arretrato_si_sposta_solo_se_lo_chiedi(client, auth, f
     cartelle = modulo_finta.stato(finta["id"]).cartelle
     assert cartelle == {}  # contratto 15.2: niente arretrato spostato da solo
     da_applicare = client.get("/api/arretrato", headers=auth).json()["da_applicare"]
-    assert da_applicare == 10
+    assert da_applicare == 9  # la mail-trappola è da controllare (possibile truffa): non si sposta
     assert client.post("/api/arretrato/applica", json={}, headers=auth).status_code == 422
     r = client.post("/api/arretrato/applica", json={"conferma": True}, headers=auth)
-    assert r.status_code == 202 and r.json() == {"da_applicare": 10}
+    assert r.status_code == 202 and r.json() == {"da_applicare": 9}
     assert cartelle["finta-7"] == "Sol/Clienti"  # sopralluogo urgente
     assert cartelle["finta-4"] == "Sol/PEC ed enti"
     assert mail_per_oggetto(client, auth, "quadro elettrico")["applicata_in_casella"] is True

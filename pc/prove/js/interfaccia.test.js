@@ -755,3 +755,127 @@ test('16. aperta da una notifica (#mail/812): si apre quella mail e l\'elenco c\
   assert.equal(p.q('.oggetto-grande').textContent, 'Altra mail');
   p.chiudi();
 });
+
+// --- §16 Possibile truffa -------------------------------------------------------------------------
+
+const AVVISO_TRUFFA = 'Attenzione: questa mail potrebbe essere una truffa. Prima di pagare, cambiare coordinate bancarie o mandare documenti, telefona al mittente a un numero che conosci già, non a quello scritto nella mail.';
+
+function conTruffa(extra) {
+  const s = B.server();
+  s.mails = [
+    B.mail(820, Object.assign({ oggetto: 'Nuovo IBAN per i pagamenti', mittente: { nome: 'Ferramenta Neri', indirizzo: 'amministrazione@neri-pagamenti.esempio.it' }, sospetta: true, smistamento: 'da_controllare', urgenza: 'alta', letta: false }, extra || {})),
+    B.mail(819, { oggetto: 'Sopralluogo', letta: true }),
+  ];
+  return s;
+}
+
+test('16.3 etichetta rossa "Possibile truffa" prima di tutte le altre', opz, async () => {
+  const s = conTruffa();
+  const p = await B.pagina(s);
+  const riga = p.riga(820);
+  const segni = p.tutti('.segno', riga);
+  assert.equal(segni[0].textContent, 'Possibile truffa');
+  assert.ok(segni[0].classList.contains('truffa'));
+  assert.ok(segni.length > 1, 'le altre etichette vengono dopo');
+  assert.ok(!/Possibile truffa/.test(p.riga(819).textContent));
+  p.chiudi();
+});
+
+test('16.3 mail aperta: avviso in cima col testo del contratto e "Non è una truffa"', opz, async () => {
+  const s = conTruffa();
+  const p = await B.pagina(s);
+  p.clic(p.riga(820));
+  await p.aspetta(() => p.q('.riquadro.truffa'));
+  const testata = p.q('.mail-aperta');
+  assert.equal(testata.firstElementChild, p.q('.riquadro.truffa'), 'in cima, prima dell\'oggetto');
+  assert.equal(p.q('.testo-truffa').textContent, AVVISO_TRUFFA);
+  await p.clicTesto('Non è una truffa');
+  await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/820/sospetta'));
+  assert.deepEqual(s.log.find((x) => x.url === '/server/api/mail/820/sospetta').corpo, { sospetta: false });
+  await p.aspetta(() => !p.q('.riquadro.truffa'));
+  assert.ok(!/Possibile truffa/.test(p.riga(820).textContent), 'l\'etichetta sparisce');
+  p.chiudi();
+});
+
+test('16.3 sulle mail non segnalate: "Segnala come possibile truffa", meno in vista', opz, async () => {
+  const s = conTruffa();
+  const p = await B.pagina(s);
+  p.clic(p.riga(819));
+  await p.aspetta(() => p.pulsante('Segnala come possibile truffa'));
+  const pulsante = p.pulsante('Segnala come possibile truffa');
+  assert.ok(pulsante.classList.contains('discreto'));
+  assert.ok(!pulsante.classList.contains('primario'));
+  await p.clicTesto('Segnala come possibile truffa');
+  await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/819/sospetta'));
+  assert.deepEqual(s.log.find((x) => x.url === '/server/api/mail/819/sospetta').corpo, { sospetta: true });
+  await p.aspetta(() => p.q('.riquadro.truffa'));
+  assert.ok(p.q('.riquadro.truffa'));
+  p.chiudi();
+});
+
+test('16.3 filtro "Possibili truffe" col numero, solo se ce ne sono', opz, async () => {
+  const s = conTruffa();
+  const p = await B.pagina(s);
+  const voce = () => p.tutti('.voce').find((v) => v.querySelector('.etichetta').textContent === 'Possibili truffe');
+  assert.ok(voce(), 'c\'è con una mail sospetta');
+  assert.equal(voce().querySelector('.contatore').textContent, '1');
+  await p.clicTesto('Possibili truffe');
+  await p.aspetta(() => s.log.some((x) => /\/server\/api\/mail\?sospetta=true/.test(x.url)));
+  assert.ok(s.log.some((x) => /\/server\/api\/mail\?sospetta=true/.test(x.url)));
+  assert.equal(p.righe().length, 1);
+  p.chiudi();
+
+  const senza = B.server();
+  senza.mails = [B.mail(819)];
+  const p2 = await B.pagina(senza);
+  assert.ok(!p2.tutti('.voce').some((v) => v.querySelector('.etichetta').textContent === 'Possibili truffe'), 'senza sospette il filtro non c\'è');
+  p2.chiudi();
+});
+
+test('16.3 Invio ("va bene così") su una mail sospetta accetta il gruppo ma NON toglie il sospetto', opz, async () => {
+  const s = conTruffa();
+  const p = await B.pagina(s);
+  p.clic(p.riga(820));
+  await p.aspetta(() => p.q('.riquadro.truffa'));
+  assert.match(p.q('.riquadro.controllare').textContent, /resta segnalata/);
+  p.q('.elenco-mail').focus();
+  p.tasto('Enter', {}, p.q('.elenco-mail'));
+  await p.aspetta(() => s.log.some((x) => x.url === '/server/api/mail/820/conferma'));
+  await B.dorme(120);
+  assert.ok(!s.log.some((x) => x.url.endsWith('/sospetta')), 'nessuna richiesta che tolga il sospetto');
+  const mail = s.mails.find((m) => m.id === 820);
+  assert.equal(mail.smistamento, 'smistata', 'il gruppo è accettato');
+  assert.equal(mail.sospetta, true, 'la mail resta segnalata');
+  assert.match(p.riga(820).textContent, /Possibile truffa/, 'e l\'etichetta resta');
+  p.chiudi();
+});
+
+test('16.3 rispondendo a una mail sospetta il riquadro della bozza avvisa in rosso', opz, async () => {
+  const s = conTruffa();
+  s.bozze[70] = B.bozza(70, { mail_id: 820, oggetto: 'Re: Nuovo IBAN per i pagamenti' });
+  const p = await B.pagina(s);
+  p.clic(p.riga(820));
+  await p.aspetta(() => p.q('#bozza-testo'));
+  const avviso = p.q('.sezione-bozza .in-linea.truffa');
+  assert.ok(avviso);
+  assert.match(avviso.textContent, /Stai rispondendo a una mail segnalata come possibile truffa/);
+  p.chiudi();
+});
+
+test('16.2 soglia della possibile truffa nelle impostazioni (tra 20% e 90%)', opz, async () => {
+  const s = B.server();
+  const p = await B.pagina(s);
+  await p.clicTesto('Impostazioni');
+  await p.aspetta(() => p.q('#imp-truffa'));
+  const soglia = p.q('#imp-truffa');
+  assert.equal(soglia.min, '20');
+  assert.equal(soglia.max, '90');
+  assert.equal(soglia.value, '50');
+  assert.match(p.q('#imp-sol').textContent, /Meglio un'etichetta in più che una truffa non vista/);
+  soglia.value = '30';
+  soglia.dispatchEvent(new p.w.Event('input', { bubbles: true }));
+  await p.clicTesto('Salva', p.q('#imp-sol'));
+  await p.aspetta(() => s.log.some((x) => x.metodo === 'PATCH' && x.url === '/server/api/impostazioni'));
+  assert.deepEqual(s.log.find((x) => x.metodo === 'PATCH').corpo, { soglia_truffa: 0.3 });
+  p.chiudi();
+});

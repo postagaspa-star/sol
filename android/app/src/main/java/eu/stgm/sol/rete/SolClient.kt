@@ -59,7 +59,7 @@ data class Configurazione(val server: String, val token: String, val dispositivo
 }
 
 /** I filtri rapidi della schermata Posta. */
-enum class FiltroRapido { TUTTE, DA_RISPONDERE, URGENTI, DA_CONTROLLARE }
+enum class FiltroRapido { TUTTE, DA_RISPONDERE, URGENTI, DA_CONTROLLARE, SOSPETTE }
 
 data class FiltroMail(
     val gruppoId: Long? = null,
@@ -76,6 +76,7 @@ data class FiltroMail(
                 FiltroRapido.DA_RISPONDERE -> add("da_rispondere=true")
                 FiltroRapido.URGENTI -> add("urgenza=alta")
                 FiltroRapido.DA_CONTROLLARE -> add("smistamento=da_controllare")
+                FiltroRapido.SOSPETTE -> add("sospetta=true")
             }
             add("limite=$limite")
             primaDi?.let { add("prima_di=$it") }
@@ -232,6 +233,18 @@ class SolClient(
 
     suspend fun segnaLetta(mailId: Long, letta: Boolean): Esito<Unit> =
         chiamaSenzaDato("POST", "/api/mail/$mailId/letta", buildJsonObject { put("letta", letta) }.toString())
+
+    /**
+     * 16.2: `false` = "Non è una truffa" (la mail torna normale), `true` = "Segnala
+     * come possibile truffa". Il contratto non dice cosa torna: se non è una Mail, la si rilegge.
+     */
+    suspend fun segnaSospetta(mailId: Long, sospetta: Boolean): Esito<Mail> =
+        chiamaPoiRileggi(
+            "POST",
+            "/api/mail/$mailId/sospetta",
+            buildJsonObject { put("sospetta", sospetta) }.toString(),
+            Mail.serializer(),
+        ) { dettaglioMail(mailId) }
 
     suspend fun daRispondere(mailId: Long, valore: Boolean): Esito<Unit> =
         chiamaSenzaDato(

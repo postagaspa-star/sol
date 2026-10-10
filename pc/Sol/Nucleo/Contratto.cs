@@ -50,6 +50,9 @@ public sealed record Mail
     public bool ApplicataInCasella { get; init; }
     public RiferimentoBozza? Bozza { get; init; }
     public Pec? Pec { get; init; }
+
+    /// <summary>§16: possibile truffa (etichetta rossa, niente bozza automatica, niente notifica da urgente).</summary>
+    public bool Sospetta { get; init; }
 }
 
 public sealed record ElencoMail

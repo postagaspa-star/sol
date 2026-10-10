@@ -1,12 +1,15 @@
 import json
 
+import numpy
 import pytest
+from fastapi.testclient import TestClient
 
 from app.domande import Domanda, DomandeNonValide, Opzione, leggi_decidi
 from app.insieme import MAX_TESTE, LettoreInsieme, messaggi_insieme
-from app.modello import FILE_DOMANDE_CONSIGLIATE, prepara_domande_consigliate
+from app.modello import FILE_DOMANDE_CONSIGLIATE, Motore, prepara_domande_consigliate
 from app.punteggio import SEGNAPOSTO_TAGLIO, TroppoLungo
-from finti import MotoreFinto, TokenizzatoreFinto
+from app.servizio import crea_app
+from finti import VOCABOLARIO, MotoreFinto, TokenizzatoreFinto, codifica_come_llama, token_spazio
 
 GRUPPO = Domanda("gruppo", "A quale gruppo appartiene questa mail?", (
     Opzione("Clienti", "un cliente chiede o conferma un lavoro"),
@@ -81,13 +84,77 @@ def test_verifica_gguf_diversa_blocca():
         let.decidi("Testo: ciao", [GRUPPO])
 
 
+def domande_consigliate():
+    dati = json.loads(FILE_DOMANDE_CONSIGLIATE.read_text(encoding="utf-8"))
+    return dati["domande"], leggi_decidi({"stato": "x", "domande": dati["domande"]})[1]
+
+
 def test_domande_consigliate_preparate_in_anticipo():
     let, motore = lettore()
     prepara_domande_consigliate(let)
-    assert len(let._teste) == 1
-    dati = json.loads(FILE_DOMANDE_CONSIGLIATE.read_text(encoding="utf-8"))
-    _, domande = leggi_decidi({"stato": "x", "domande": dati["domande"]})
-    assert [d.id for d in domande] == ["gruppo", "da_rispondere", "urgenza"]
+    # Due teste: tutte e quattro le domande, e le stesse senza "gruppo" (gruppo deciso da una regola).
+    assert len(let._teste) == 2
+    _, domande = domande_consigliate()
+    assert [d.id for d in domande] == ["gruppo", "da_rispondere", "urgenza", "truffa"]
     let.decidi("Testo: preventivo", domande)
-    # la testa c'era già: nessun nuovo prefill
-    assert [c[0] for c in motore.chiamate].count("prefill") == 1
+    let.decidi("Testo: preventivo", [d for d in domande if d.id != "gruppo"])
+    # le teste c'erano già: nessun nuovo prefill
+    assert [c[0] for c in motore.chiamate].count("prefill") == 2
+
+
+# Testo della quarta domanda (contratto 16.1): il server ne tiene una copia identica.
+DOMANDA_TRUFFA = {
+    "id": "truffa",
+    "domanda": "Questa mail potrebbe essere un tentativo di truffa o di raggiro?",
+    "opzioni": [
+        {"id": "si", "descrizione": "sì: chiede di cambiare IBAN o coordinate bancarie, di pagare con urgenza, "
+                                    "di mandare fatture, documenti, password o codici, di aprire un link per "
+                                    "sbloccare o verificare qualcosa, oppure finge di essere una banca, un "
+                                    "corriere, un fornitore o un cliente con un indirizzo o un tono strano"},
+        {"id": "no", "descrizione": "no: è una normale comunicazione di lavoro, una fattura attesa, un avviso "
+                                    "o una pubblicità"},
+    ],
+}
+
+
+def test_domanda_truffa_coi_testi_esatti():
+    grezze, _ = domande_consigliate()
+    assert [d["id"] for d in grezze] == ["gruppo", "da_rispondere", "urgenza", "truffa"]
+    assert grezze[3] == DOMANDA_TRUFFA
+
+
+class MotorePerNumero(MotoreFinto):
+    """Risponde una lettera diversa per ogni domanda: guarda l'ultima riga ("1:", "2:"...)."""
+
+    def __init__(self, risposte: dict[str, str], **kwargs):
+        super().__init__(**kwargs)
+        self.risposte = risposte
+
+    def _logit(self):
+        numero = TokenizzatoreFinto().decode(self.memoria).rstrip().rsplit("\n", 1)[-1].rstrip(":")
+        lettera = self.risposte.get(numero, "A")
+        logit = numpy.zeros(VOCABOLARIO, dtype=numpy.float32)
+        logit[ord(lettera)] = 8.0
+        logit[token_spazio(lettera)] = 8.0
+        return logit
+
+
+def test_quattro_domande_lette_in_fila():
+    _, domande = domande_consigliate()
+    motore = MotorePerNumero({"1": "B", "2": "A", "3": "C", "4": "A"})
+    lettore_vero = LettoreInsieme(TokenizzatoreFinto(), motore, 4096, verifica=codifica_come_llama)
+    esiti = lettore_vero.decidi("Testo: da oggi pagate sul nuovo IBAN", domande)
+    assert [p.index(max(p)) for p, _ in esiti] == [1, 0, 2, 0]
+    assert TokenizzatoreFinto().decode(motore.memoria).endswith("1: B\n2: A\n3: C\n4:")
+
+
+def test_http_quattro_domande_con_truffa():
+    grezze, _ = domande_consigliate()
+    motore_llama = MotorePerNumero({"1": "B", "2": "A", "3": "C", "4": "A"})
+    lettore_vero = LettoreInsieme(TokenizzatoreFinto(), motore_llama, 4096, verifica=codifica_come_llama)
+    motore = Motore(None, carica=lambda: (lettore_vero.decidi, None, motore_llama))
+    motore._avvia()
+    corpo = TestClient(crea_app(motore)).post("/decidi", json={"stato": "Testo: nuovo IBAN", "domande": grezze}).json()
+    assert {k: v["scelta"] for k, v in corpo["risposte"].items()} == {
+        "gruppo": "Fornitori", "da_rispondere": "si", "urgenza": "bassa", "truffa": "si"}
+    assert set(corpo["risposte"]["truffa"]["probabilita"]) == {"si", "no"}

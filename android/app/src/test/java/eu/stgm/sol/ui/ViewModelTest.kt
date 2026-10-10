@@ -113,6 +113,61 @@ class ViewModelTest {
     }
 
     @Test
+    fun `posta - il filtro Possibili truffe si vede solo se ce n'e almeno una`() {
+        serverBase()
+        server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 0}""")
+        val vm = PostaViewModel(client, cache)
+        vm.carica()
+        aspetta { vm.stato.value.conteggi != null }
+        assertFalse("a zero il filtro non c'è", vm.stato.value.filtroTruffeVisibile)
+
+        server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 2}""")
+        server.rispondi("GET /api/mail?sospetta=true&limite=50", """{"mail": [${Esempi.MAIL_SOSPETTA}], "altre": false}""")
+        vm.carica()
+        aspetta { vm.stato.value.conteggi?.sospette == 2 }
+        assertTrue(vm.stato.value.filtroTruffeVisibile)
+        assertEquals(2, vm.stato.value.numero(FiltroRapido.SOSPETTE))
+
+        vm.scegliFiltro(FiltroRapido.SOSPETTE)
+        aspetta { vm.stato.value.mail.map { it.id } == listOf(820L) }
+        assertTrue(vm.stato.value.mail.single().sospetta)
+        // Chiarite tutte mentre il filtro è scelto: resta visibile per poterlo togliere.
+        server.rispondi("GET /api/conteggi", """{"sospette": 0}""")
+        vm.carica()
+        aspetta { vm.stato.value.conteggi?.sospette == 0 && !vm.stato.value.caricamento }
+        assertTrue(vm.stato.value.filtroTruffeVisibile)
+    }
+
+    @Test
+    fun `dettaglio - non e una truffa riporta la mail normale, segnala la rimette sospetta`() {
+        serverBase()
+        server.rispondi("GET /api/mail/820", Esempi.DETTAGLIO_SOSPETTO)
+        val vm = DettaglioViewModel(client, cache, intervalloBozzaMs = 20)
+        vm.apri(820)
+        aspetta { vm.stato.value.mail != null }
+        assertTrue(vm.stato.value.mail!!.sospetta)
+
+        server.rispondi(
+            "POST /api/mail/820/sospetta",
+            Esempi.MAIL_SOSPETTA.replace("\"sospetta\": true", "\"sospetta\": false").replace("\"da_controllare\"", "\"smistata\""),
+        )
+        vm.nonETruffa()
+        aspetta { vm.stato.value.messaggio != null }
+        assertEquals("""{"sospetta":false}""", server.richiesteA("POST /api/mail/820/sospetta").single().body.readUtf8())
+        assertFalse(vm.stato.value.mail!!.sospetta)
+        assertEquals("smistata", vm.stato.value.mail!!.smistamento)
+        assertTrue("il testo della mail non si perde", vm.stato.value.mail!!.corpo!!.contains("IBAN"))
+        assertEquals("Va bene: Sol la tratta come una mail normale.", vm.stato.value.messaggio)
+
+        vm.consumaMessaggio()
+        server.rispondi("POST /api/mail/820/sospetta", Esempi.MAIL_SOSPETTA)
+        vm.segnalaTruffa()
+        aspetta { vm.stato.value.messaggio != null }
+        assertTrue(vm.stato.value.mail!!.sospetta)
+        assertEquals("""{"sospetta":true}""", server.richiesteA("POST /api/mail/820/sospetta").last().body.readUtf8())
+    }
+
+    @Test
     fun `posta - mostra le piu vecchie partendo dall'ultima`() {
         serverBase()
         val vm = PostaViewModel(client, cache)
@@ -500,6 +555,21 @@ class ViewModelTest {
         vm.cambiaSoglia(0.9012)
         aspetta { server.richiesteA("PATCH /api/impostazioni").size == 2 }
         assertEquals("""{"soglia_sicurezza":0.9}""", server.richiesteA("PATCH /api/impostazioni").last().body.readUtf8())
+    }
+
+    @Test
+    fun `impostazioni - soglia truffa tra 0,2 e 0,9`() {
+        val vm = impostazioni()
+        server.rispondi("PATCH /api/impostazioni", Esempi.impostazioni())
+        vm.cambiaSogliaTruffa(0.349)
+        aspetta { server.richiesteA("PATCH /api/impostazioni").size == 1 && !vm.stato.value.inCorso }
+        assertEquals("""{"soglia_truffa":0.34}""", server.richiesteA("PATCH /api/impostazioni").last().body.readUtf8())
+        vm.cambiaSogliaTruffa(0.05)
+        aspetta { server.richiesteA("PATCH /api/impostazioni").size == 2 && !vm.stato.value.inCorso }
+        assertEquals("""{"soglia_truffa":0.2}""", server.richiesteA("PATCH /api/impostazioni").last().body.readUtf8())
+        vm.cambiaSogliaTruffa(1.0)
+        aspetta { server.richiesteA("PATCH /api/impostazioni").size == 3 }
+        assertEquals("""{"soglia_truffa":0.9}""", server.richiesteA("PATCH /api/impostazioni").last().body.readUtf8())
     }
 
     @Test

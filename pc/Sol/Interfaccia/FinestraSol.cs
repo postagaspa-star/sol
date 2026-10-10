@@ -27,7 +27,7 @@ public sealed class FinestraSol : Form
     /// <summary>Le sezioni dell'interfaccia (SEZIONI di app.js) che si possono aprire da fuori (clic su una notifica).</summary>
     private static readonly HashSet<string> Sezioni = new(StringComparer.Ordinal)
     {
-        "posta", "da-rispondere", "urgenti", "da-controllare", "riassunti", "indietro", "scadenze", "impostazioni", "notifiche",
+        "posta", "da-rispondere", "urgenti", "da-controllare", "riassunti", "indietro", "scadenze", "impostazioni", "notifiche", "truffe",
     };
 
     public FinestraSol(Ponte ponte, string cartellaUi, string cartellaDatiWebView, Icon icona, string? frammento = null)

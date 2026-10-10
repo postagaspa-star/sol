@@ -14,7 +14,7 @@ def test_p3_spegnere_la_prova_non_sposta_l_arretrato(client, auth, finta, serviz
     client.patch("/api/impostazioni", json={"modalita_prova": False}, headers=auth)
     assert servizi.lavoro.applica_in_caselle() == 0
     assert modulo_finta.stato(finta["id"]).cartelle == {}
-    assert client.get("/api/arretrato", headers=auth).json() == {"da_applicare": 10}
+    assert client.get("/api/arretrato", headers=auth).json() == {"da_applicare": 9}  # la trappola resta da controllare
 
 
 def test_p3_riaccendere_la_prova_ferma_subito_gli_spostamenti(client, auth, finta, servizi, app):

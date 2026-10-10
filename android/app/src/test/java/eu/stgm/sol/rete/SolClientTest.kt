@@ -42,6 +42,7 @@ class SolClientTest {
     @Test
     fun `percorsi dei filtri rapidi e della paginazione`() {
         assertEquals("/api/mail?limite=50", FiltroMail().percorso())
+        assertEquals("/api/mail?sospetta=true&limite=50", FiltroMail(filtro = FiltroRapido.SOSPETTE).percorso())
         assertEquals("/api/mail?da_rispondere=true&limite=50", FiltroMail(filtro = FiltroRapido.DA_RISPONDERE).percorso())
         assertEquals(
             "/api/mail?smistamento=da_controllare&limite=50&prima_di=812",
@@ -210,6 +211,18 @@ class SolClientTest {
         assertEquals("""{"conferma":true}""", server.richiesteA("POST /api/arretrato/applica").single().body.readUtf8())
         assertEquals("ABCD-EFGH", o.codiceUtente)
         assertEquals("{}", server.richiesteA("POST /api/caselle/2/ricollega").single().body.readUtf8())
+    }
+
+    @Test
+    fun `non e una truffa e segnala come possibile truffa`() = runBlocking {
+        server.rispondi("POST /api/mail/820/sospetta", Esempi.MAIL_SOSPETTA.replace("\"sospetta\": true", "\"sospetta\": false"))
+        val esito = client.segnaSospetta(820, sospetta = false) as Esito.Ok
+        assertEquals(false, esito.dato.sospetta)
+        server.rispondi("POST /api/mail/812/sospetta", "", 204)
+        server.rispondi("GET /api/mail/812", Esempi.DETTAGLIO.trimEnd().removeSuffix("}") + """, "sospetta": true}""")
+        assertEquals(true, (client.segnaSospetta(812, sospetta = true) as Esito.Ok).dato.sospetta)
+        assertEquals("""{"sospetta":false}""", server.richiesteA("POST /api/mail/820/sospetta").single().body.readUtf8())
+        assertEquals("""{"sospetta":true}""", server.richiesteA("POST /api/mail/812/sospetta").single().body.readUtf8())
     }
 
     @Test

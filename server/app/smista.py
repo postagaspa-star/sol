@@ -42,6 +42,7 @@ _CONSIGLIATE = {
 DOMANDA_GRUPPO = _CONSIGLIATE["gruppo"]["domanda"]
 DOMANDA_DA_RISPONDERE = _CONSIGLIATE["da_rispondere"]
 DOMANDA_URGENZA = _CONSIGLIATE["urgenza"]
+DOMANDA_TRUFFA = _CONSIGLIATE["truffa"]  # contratto 16.1
 # Sotto questa probabilità la risposta su da_rispondere/urgenza è incerta: si tiene il
 # valore più prudente (contratto 15.14).
 SOGLIA_INCERTEZZA = 0.6
@@ -161,20 +162,25 @@ def _chiave_gruppo(conn: sqlite3.Connection, gruppo_id) -> str | None:
 
 def valuta(conn: sqlite3.Connection, m: sqlite3.Row, decisore, soglia: float) -> None:
     """Fa le domande che mancano per questa mail e salva le risposte.
+    La domanda sulla truffa si fa per OGNI mail, anche per quelle smistate da una regola
+    (contratto 16.1): un indirizzo noto può essere stato rubato.
     Solleva le eccezioni del decisore (chi chiama decide se riprovare)."""
     in_attesa = m["smistamento"] == "in_attesa"
+    serve_gruppo = in_attesa and m["gruppo_id"] is None
+    # Sempre le stesse serie di domande (4 o 3): il decisore tiene pronte in memoria al
+    # massimo tre "teste" di domande, e cambiarle costa ~40 s sul NAS.
+    domande = ([domanda_gruppo(conn)] if serve_gruppo else []) + [DOMANDA_DA_RISPONDERE, DOMANDA_URGENZA,
+                                                                  DOMANDA_TRUFFA]
+    risposte = decisore.decidi(prompt.stato_per_decisore(m), domande, facoltative=frozenset({"truffa"}))
     newsletter_utente = (
         not in_attesa
         and _chiave_gruppo(conn, m["gruppo_id"]) == "newsletter"
         and (m["regola_fissa"] != "newsletter" or m["smistamento"] == "corretta")
     )
     if newsletter_utente:
-        # L'utente ha deciso che questo mittente è una newsletter: non si chiede niente.
-        risposte = dict(RISPOSTE_NEWSLETTER)
-    else:
-        serve_gruppo = in_attesa and m["gruppo_id"] is None
-        domande = ([domanda_gruppo(conn)] if serve_gruppo else []) + [DOMANDA_DA_RISPONDERE, DOMANDA_URGENZA]
-        risposte = decisore.decidi(prompt.stato_per_decisore(m), domande)
+        # L'utente ha deciso che questo mittente è una newsletter: da rispondere e urgenza
+        # non si chiedono al decisore (vale la sua scelta), la truffa sì.
+        risposte = {**risposte, **RISPOSTE_NEWSLETTER}
     salva_valutazione(conn, m["id"], risposte, soglia)
 
 
@@ -224,22 +230,41 @@ def salva_valutazione(conn: sqlite3.Connection, mail_id: int, risposte: dict, so
         decisa_da_altri = {"da_rispondere": m["da_rispondere"] is not None or bool(m["automatica"]),
                            "urgenza": bool(m["urgenza"])}
         incerti_validi = [c for c in incerti if not decisa_da_altri[c]]
+        # Possibile truffa (contratto 16.2). La decisione dell'utente vince sempre; se il
+        # decisore non ha risposto alla domanda, la mail non è sospetta ma resta "incerta".
+        if "truffa" in risposte:
+            probabilita["truffa"] = risposte["truffa"]["probabilita"]
+            dal_decisore = float(risposte["truffa"]["probabilita"].get("si", 0.0)) >= float(
+                db.impostazioni(conn)["soglia_truffa"])
+        else:
+            dal_decisore = False
+            if m["sospetta_utente"] is None:
+                incerti_validi.append("truffa")
+        sospetta = bool(m["sospetta_utente"]) if m["sospetta_utente"] is not None else dal_decisore
+        stato_smistamento = campi.get("smistamento", m["smistamento"])
+        if sospetta and stato_smistamento in ("in_attesa", "smistata"):
+            stato_smistamento = "da_controllare"  # anche se il gruppo era sicuro o veniva da una regola
+            campi["smistamento"] = stato_smistamento
         campi.update(
             da_rispondere=1 if da_rispondere else 0,
             urgenza=m["urgenza"] or risposte["urgenza"]["scelta"],
             seq_valutata=db.prossimo_seq(conn),
             incerti=json.dumps(incerti_validi),
+            sospetta=1 if sospetta else 0,
+            truffa_valutata=1,
         )
-        if campi.get("smistamento") == "smistata" and not prova_accesa(conn):
+        if stato_smistamento == "smistata" and not prova_accesa(conn):
             campi["applica"] = 1
         probabilita["da_rispondere"] = risposte["da_rispondere"]["probabilita"]
         probabilita["urgenza"] = risposte["urgenza"]["probabilita"]
         campi["probabilita"] = json.dumps(probabilita)
         assegnazioni = ", ".join(f"{k} = ?" for k in campi)
         conn.execute(f"UPDATE mail SET {assegnazioni} WHERE id = ?", (*campi.values(), mail_id))
-        if da_rispondere and not m["risposta_data"]:
+        if sospetta:
+            togli_dal_flusso_normale(conn, mail_id)
+        elif da_rispondere and not m["risposta_data"]:
             crea_bozza_automatica(conn, mail_id)
-        if da_rispondere or risposte["urgenza"]["scelta"] == "alta":
+        if not sospetta and (da_rispondere or risposte["urgenza"]["scelta"] == "alta"):
             db.segna_riassunto_oggi_da_rifare(conn)
 
 
@@ -258,14 +283,22 @@ def scelte_prudenti(risposte: dict) -> tuple[dict, list[str]]:
 
 def lascia_all_utente(conn: sqlite3.Connection, mail_id: int) -> None:
     """Il decisore non riesce a valutare questa mail: la decide l'utente. Se una regola
-    aveva già proposto il gruppo vale quella, altrimenti va in Altro da controllare."""
+    aveva già proposto il gruppo vale quella, altrimenti va in Altro da controllare. Il
+    controllo truffa non c'è stato: la mail resta "incerta" anche su quello."""
     m = conn.execute("SELECT * FROM mail WHERE id = ?", (mail_id,)).fetchone()
-    if m is None or m["smistamento"] != "in_attesa":
+    if m is None:
+        return
+    incerti = json.loads(m["incerti"] or "[]")
+    if not m["truffa_valutata"] and m["sospetta_utente"] is None and "truffa" not in incerti:
+        incerti.append("truffa")
+    conn.execute("UPDATE mail SET truffa_valutata = 1, incerti = ? WHERE id = ?", (json.dumps(incerti), mail_id))
+    if m["smistamento"] != "in_attesa":
         return
     if m["gruppo_id"] is not None:
+        sospetta = bool(m["sospetta"])
         conn.execute(
-            "UPDATE mail SET smistamento = 'smistata', sicurezza = 1.0, applica = ? WHERE id = ?",
-            (0 if prova_accesa(conn) else 1, mail_id),
+            "UPDATE mail SET smistamento = ?, sicurezza = 1.0, applica = ? WHERE id = ?",
+            ("da_controllare" if sospetta else "smistata", 0 if (prova_accesa(conn) or sospetta) else 1, mail_id),
         )
         return
     altro = db.gruppo_per_chiave(conn, "altro")
@@ -275,14 +308,65 @@ def lascia_all_utente(conn: sqlite3.Connection, mail_id: int) -> None:
     )
 
 
+def togli_dal_flusso_normale(conn: sqlite3.Connection, mail_id: int) -> None:
+    """Una possibile truffa non si tratta come una richiesta: niente bozza automatica (quella
+    non toccata dall'utente si scarta) e niente scadenze tratte dalle sue righe."""
+    conn.execute(
+        "UPDATE bozze SET stato = 'scartata', versione = versione + 1 WHERE mail_id = ? AND tipo = 'risposta'"
+        " AND stato IN ('in_preparazione', 'pronta', 'errore') AND richiesta_utente = 0 AND modificata = 0"
+        " AND in_invio_dal IS NULL",
+        (mail_id,),
+    )
+    conn.execute("DELETE FROM scadenze WHERE mail_id = ? AND stato = 'aperta'", (mail_id,))
+    conn.execute("UPDATE mail SET scadenze_fatte = 0 WHERE id = ?", (mail_id,))
+
+
+def decisione_utente_truffa(conn: sqlite3.Connection, mail_id: int, sospetta: bool) -> None:
+    """POST /api/mail/{id}/sospetta: la decisione dell'utente vince sul decisore, anche dopo."""
+    with db.transazione(conn):
+        m = conn.execute("SELECT * FROM mail WHERE id = ?", (mail_id,)).fetchone()
+        incerti = [c for c in json.loads(m["incerti"] or "[]") if c != "truffa"]
+        conn.execute(
+            "UPDATE mail SET sospetta = ?, sospetta_utente = ?, incerti = ? WHERE id = ?",
+            (1 if sospetta else 0, 1 if sospetta else 0, json.dumps(incerti), mail_id),
+        )
+        if sospetta:
+            if m["smistamento"] == "smistata":
+                conn.execute("UPDATE mail SET smistamento = 'da_controllare', applica = 0 WHERE id = ?", (mail_id,))
+            togli_dal_flusso_normale(conn, mail_id)
+            return
+        # "Non è una truffa": torna nel flusso normale, come se il controllo non avesse trovato niente.
+        if m["smistamento"] == "da_controllare" and _gruppo_sicuro(conn, m):
+            conn.execute(
+                "UPDATE mail SET smistamento = 'smistata', applica = ? WHERE id = ?",
+                (0 if prova_accesa(conn) else 1, mail_id),
+            )
+        if m["da_rispondere"] and not m["risposta_data"]:
+            crea_bozza_automatica(conn, mail_id)
+
+
+def _gruppo_sicuro(conn: sqlite3.Connection, m: sqlite3.Row) -> bool:
+    """Il gruppo valeva già da solo (regola, o decisore sopra la soglia): era da controllare
+    solo per il sospetto di truffa."""
+    if m["regola_fissa"] == "newsletter":
+        return False  # la proposta Newsletter con una richiesta vera resta da guardare
+    if m["origine_smistamento"] == "regola":
+        return True
+    soglia = float(db.impostazioni(conn)["soglia_sicurezza"])
+    return m["origine_smistamento"] == "decisore" and (m["sicurezza"] or 0.0) >= soglia
+
+
 def crea_bozza_automatica(conn: sqlite3.Connection, mail_id: int) -> int | None:
-    """Prenota la bozza (in_preparazione): la scrive lo scrittore quando tocca a lei."""
+    """Prenota la bozza (in_preparazione): la scrive lo scrittore quando tocca a lei.
+    Mai per una possibile truffa (contratto 16.2): lì una bozza la chiede solo l'utente."""
+    m = conn.execute("SELECT mittente_indirizzo, oggetto, sospetta FROM mail WHERE id = ?", (mail_id,)).fetchone()
+    if m is None or m["sospetta"]:
+        return None
     esiste = conn.execute(
         "SELECT 1 FROM bozze WHERE mail_id = ? AND tipo = 'risposta' AND stato != 'scartata'", (mail_id,)
     ).fetchone()
     if esiste:
         return None
-    m = conn.execute("SELECT mittente_indirizzo, oggetto FROM mail WHERE id = ?", (mail_id,)).fetchone()
     cur = conn.execute(
         "INSERT INTO bozze (mail_id, tipo, stato, a, oggetto, creata_il) VALUES (?, 'risposta', 'in_preparazione', ?, ?, ?)",
         (mail_id, json.dumps([m["mittente_indirizzo"]] if m["mittente_indirizzo"] else []),

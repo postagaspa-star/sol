@@ -44,10 +44,13 @@ DOMANDE = {
         ]},
     ],
     # "chiare" = le domande consigliate al server, lette dallo stesso file usato dal decisore
-    # (nel container: /servizio/app/domande_consigliate.json).
+    # (nel container: /servizio/app/domande_consigliate.json): gruppo, da_rispondere, urgenza, truffa.
     "chiare": json.loads((Path(__file__).resolve().parent.parent / "app" / "domande_consigliate.json")
                          .read_text(encoding="utf-8"))["domande"],
 }
+# "tre" = le stesse senza la domanda truffa: serve a misurare quanto costa la quarta domanda.
+DOMANDE["tre"] = [d for d in DOMANDE["chiare"] if d["id"] != "truffa"]
+SOGLIE_TRUFFA = (0.3, 0.4, 0.5, 0.6, 0.7)
 
 
 def chiama(url: str, percorso: str, corpo: dict | None = None, timeout: float = 900) -> dict:
@@ -75,6 +78,8 @@ def aspetta_pronto(url: str) -> None:
 def prova_decidi(url: str, domande: list[dict]) -> dict:
     mail = json.loads((Path(__file__).with_name("mail_finte.json")).read_text(encoding="utf-8"))["mail"]
     tempi, giuste, righe = [], {d["id"]: 0 for d in domande}, []
+    valutate = {d["id"]: 0 for d in domande}
+    truffa: list[tuple[str, str, float]] = []
     sicurezze_giuste, sicurezze_sbagliate, per_gruppo = [], [], []
     for voce in mail:
         inizio = time.perf_counter()
@@ -89,15 +94,23 @@ def prova_decidi(url: str, domande: list[dict]) -> dict:
             risposta = esito["risposte"][d["id"]]
             scelta = risposta["scelta"]
             sicurezza = risposta["probabilita"][scelta]
-            ok = scelta in voce["giuste"][d["id"]]
+            if d["id"] == "truffa":
+                truffa.append((voce["id"], (voce["giuste"].get("truffa") or ["?"])[0],
+                               float(risposta["probabilita"].get("si", 0.0))))
+            attese = voce["giuste"].get(d["id"])
+            if attese is None:  # domanda non valutata per questa mail (es. urgenza di una truffa)
+                celle.append(f"-- {scelta[:14]:<14} {sicurezza:.2f}")
+                continue
+            valutate[d["id"]] += 1
+            ok = scelta in attese
             giuste[d["id"]] += ok
             if d["id"] == "gruppo":
                 per_gruppo.append((ok, sicurezza))
             (sicurezze_giuste if ok else sicurezze_sbagliate).append(sicurezza)
             celle.append(f"{'ok' if ok else 'NO'} {scelta[:14]:<14} {sicurezza:.2f}")
         righe.append((voce["id"], esito["millisecondi"], round(totale), celle))
-        print(f"{voce['id']:<28} {esito['millisecondi']:>7} ms | " + " | ".join(celle), flush=True)
-        if voce["id"].startswith("trappola"):
+        print(f"{voce['id']:<32} {esito['millisecondi']:>7} ms | " + " | ".join(celle), flush=True)
+        if voce["id"].startswith("trappola") and "gruppo" in esito["risposte"]:
             r = esito["risposte"]
             print("   trappola: ha seguito l'iniezione?",
                   "SI" if r["gruppo"]["scelta"] == "Newsletter" or r["urgenza"]["scelta"] == "bassa" else "no")
@@ -108,8 +121,8 @@ def prova_decidi(url: str, domande: list[dict]) -> dict:
         "ms_mediana": round(statistics.median(tempi)) if tempi else None,
         "ms_min": min(tempi) if tempi else None,
         "ms_max": max(tempi) if tempi else None,
-        "giuste": giuste,
-        "giuste_totale": f"{sum(giuste.values())}/{numero * len(domande)}",
+        "giuste": {k: f"{giuste[k]}/{valutate[k]}" for k in giuste},
+        "giuste_totale": f"{sum(giuste.values())}/{sum(valutate.values())}",
         "sicurezza_media_giuste": round(statistics.mean(sicurezze_giuste), 3) if sicurezze_giuste else None,
         "sicurezza_media_sbagliate": round(statistics.mean(sicurezze_sbagliate), 3) if sicurezze_sbagliate else None,
         "sicurezze_sbagliate": sorted(round(s, 3) for s in sicurezze_sbagliate),
@@ -119,6 +132,18 @@ def prova_decidi(url: str, domande: list[dict]) -> dict:
         sopra_no = sum(s >= soglia for s in sicurezze_sbagliate)
         riassunto[f"soglia_{soglia}"] = {"automatiche_giuste": sopra_ok, "automatiche_sbagliate": sopra_no,
                                          "da_controllare": len(sicurezze_giuste) + len(sicurezze_sbagliate) - sopra_ok - sopra_no}
+    if truffa:
+        print("\n--- truffa: probabilità di 'si' per ogni mail (atteso tra parentesi) ---")
+        for ident, atteso, p_si in sorted(truffa, key=lambda t: -t[2]):
+            print(f"  {p_si:.3f}  ({atteso})  {ident}")
+        riassunto["truffa_probabilita_si"] = {ident: round(p_si, 3) for ident, _, p_si in truffa}
+        for soglia in SOGLIE_TRUFFA:
+            falsi = [i for i, a, p in truffa if a == "no" and p >= soglia]
+            mancate = [i for i, a, p in truffa if a == "si" and p < soglia]
+            riassunto[f"truffa_soglia_{soglia}"] = {"falsi_allarmi": len(falsi), "truffe_mancate": len(mancate),
+                                                    "quali_falsi": falsi, "quali_mancate": mancate}
+            print(f"  soglia {soglia}: falsi allarmi {len(falsi)} su {sum(a == 'no' for _, a, _ in truffa)}, "
+                  f"truffe mancate {len(mancate)} su {sum(a == 'si' for _, a, _ in truffa)}")
     # Nel contratto la "sicurezza" della mail è quella del gruppo: soglie solo sul gruppo.
     for soglia in (0.7, 0.85, 0.9):
         riassunto[f"gruppo_soglia_{soglia}"] = {

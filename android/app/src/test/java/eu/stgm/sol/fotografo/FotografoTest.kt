@@ -267,6 +267,81 @@ class FotografoTest {
         scatta("04d_bozza_verifica_invio")
     }
 
+    // --- Possibile truffa (16.3) ------------------------------------------------------
+
+    private val oggi get() = LocalDate.now().toString()
+
+    @Test
+    fun truffaPosta() {
+        server.rispondi("GET /api/gruppi", Esempi.GRUPPI)
+        server.rispondi("GET /api/impostazioni", Esempi.impostazioni(prova = false))
+        server.rispondi(
+            "GET /api/mail",
+            """{"mail": [${Esempi.MAIL_SOSPETTA}, ${Esempi.MAIL}, ${Esempi.MAIL_BIANCHI}], "altre": false}""".replace("2026-10-10", oggi),
+        )
+        server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "urgenti": 2, "da_controllare": 3, "sospette": 1}""")
+        val vm = PostaViewModel(client, cache)
+        mostra { PostaScreen(vm, onApriMail = {}) }
+        aspetta { vm.stato.value.caricataAlmenoUnaVolta && vm.stato.value.conteggi != null }
+        chiaroEScuro("20_posta_truffa")
+    }
+
+    @Test
+    fun truffaDettaglio() {
+        server.rispondi("GET /api/gruppi", Esempi.GRUPPI)
+        server.rispondi("GET /api/impostazioni", Esempi.impostazioni(prova = false))
+        server.rispondi("GET /api/mail/820", Esempi.DETTAGLIO_SOSPETTO.replace("2026-10-10", oggi))
+        val vm = DettaglioViewModel(client, cache)
+        mostra { DettaglioScreen(vm, 820) {} }
+        aspetta { vm.stato.value.mail != null && !vm.stato.value.caricamento }
+        chiaroEScuro("21_dettaglio_truffa")
+        compose.onNodeWithText("Non è una truffa").performClick()
+        scattaSchermo("22_non_e_una_truffa")
+    }
+
+    @Test
+    fun truffaConfermaInvio() {
+        // Una bozza chiesta a mano per una mail sospetta: il server la prepara, la conferma avvisa.
+        server.rispondi("GET /api/gruppi", Esempi.GRUPPI)
+        server.rispondi("GET /api/impostazioni", Esempi.impostazioni(prova = false))
+        val sospetta812 = Esempi.DETTAGLIO.trimEnd().removeSuffix("}") + """, "sospetta": true}"""
+        server.rispondi("GET /api/mail/812", sospetta812.replace("2026-10-10", oggi))
+        server.rispondi("GET /api/bozze/55", Esempi.bozza(modificata = true))
+        val vm = DettaglioViewModel(client, cache)
+        mostra { DettaglioScreen(vm, 812) {} }
+        aspetta { vm.bozza.stato.value.bozza != null }
+        compose.onNodeWithText("Invia...").performScrollTo().performClick()
+        aspetta { vm.bozza.stato.value.confermaInvio != null }
+        scattaSchermo("23_conferma_risposta_truffa")
+    }
+
+    @Test
+    fun truffaSegnalaEImpostazioni() {
+        serverPosta()
+        server.rispondi("GET /api/mail/812", Esempi.DETTAGLIO.replace("2026-10-10", oggi))
+        server.rispondi("GET /api/bozze/55", Esempi.bozza())
+        val vm = DettaglioViewModel(client, cache)
+        mostra { DettaglioScreen(vm, 812) {} }
+        aspetta { vm.stato.value.mail != null && !vm.stato.value.caricamento }
+        compose.onNodeWithText("Segnala come possibile truffa").performScrollTo()
+        scatta("24_segnala_come_truffa")
+    }
+
+    @Test
+    fun truffaSoglia() {
+        server.rispondi("GET /api/caselle", "[${Esempi.CASELLA}]")
+        server.rispondi("GET /api/gruppi", Esempi.GRUPPI)
+        server.rispondi("GET /api/regole", "[]")
+        server.rispondi("GET /api/dispositivi", "[]")
+        server.rispondi("GET /api/versione", Esempi.VERSIONE)
+        server.rispondi("GET /api/impostazioni", Esempi.impostazioni())
+        val vm = ImpostazioniViewModel(client, cache, DepositoMemoria(Configurazione(server.url, "x", 3)))
+        mostra { ImpostazioniScreen(vm, onIndietro = {}, onAbbinaDiNuovo = {}, onScollegato = {}) }
+        aspetta { vm.stato.value.impostazioni != null && !vm.stato.value.caricamento }
+        compose.onNodeWithText("Dopo quanti giorni una mail senza risposta finisce in «In sospeso»").performScrollTo()
+        scatta("25_impostazioni_controllo_truffe")
+    }
+
     @Test
     fun salvareLeModifiche() {
         mostra { eu.stgm.sol.DialogoModificheInCorso(onSalva = {}, onApri = {}, onResta = {}) }

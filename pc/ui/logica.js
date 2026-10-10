@@ -18,6 +18,7 @@
     'da-rispondere': { titolo: 'Da rispondere', parametri: { da_rispondere: 'true' } },
     urgenti: { titolo: 'Urgenti', parametri: { urgenza: 'alta' } },
     'da-controllare': { titolo: 'Da controllare', parametri: { smistamento: 'da_controllare' } },
+    truffe: { titolo: 'Possibili truffe', parametri: { sospetta: 'true' } },
   };
 
   /** "?gruppo_id=3&cerca=...&limite=50&prima_di=812" per GET /api/mail. */

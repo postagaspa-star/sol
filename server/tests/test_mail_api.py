@@ -1,3 +1,5 @@
+import pytest
+
 from conftest import mail_per_oggetto, scrivi_tutto, smista_tutto
 
 
@@ -10,9 +12,9 @@ def test_forma_della_mail(client, auth, finta):
     assert set(m) == {
         "id", "casella_id", "casella", "mittente", "oggetto", "anteprima", "riassunto", "ricevuta_il", "letta",
         "risposta_data", "gruppo_id", "gruppo", "da_rispondere", "urgenza", "sicurezza", "smistamento",
-        "origine_smistamento", "applicata_in_casella", "bozza", "allegati", "pec", "incerti",
+        "origine_smistamento", "applicata_in_casella", "bozza", "allegati", "pec", "incerti", "sospetta",
     }
-    assert m["pec"] is None and m["incerti"] == []
+    assert m["pec"] is None and m["incerti"] == [] and m["sospetta"] is False
     assert m["mittente"] == {"nome": "Mario Rossi", "indirizzo": "rossi@esempio.it"}
     assert m["casella"] == "demo@esempio.it"
     assert m["allegati"] == [{"nome": "pianta-capannone.pdf", "byte": 482113}]
@@ -28,7 +30,8 @@ def test_dettaglio(client, auth, finta, servizi):
     d = client.get(f"/api/mail/{m['id']}", headers=auth).json()
     assert d["destinatari"] == ["demo@esempio.it"] and d["cc"] == []
     assert "pratica antincendio" in d["corpo"]
-    assert set(d["probabilita"]) == {"gruppo", "da_rispondere", "urgenza"}
+    assert set(d["probabilita"]) == {"gruppo", "da_rispondere", "urgenza", "truffa"}
+    assert d["probabilita"]["truffa"] == pytest.approx({"si": 0.1, "no": 0.9}) and d["sospetta"] is False
 
 
 def test_filtri(client, auth, finta, servizi):

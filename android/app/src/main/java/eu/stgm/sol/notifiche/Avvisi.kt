@@ -46,8 +46,9 @@ fun avvisiDaMostrare(novita: Novita, giaAvvisati: Set<String>, primoGiro: Boolea
     if (primoGiro) return emptyList()
     val avvisi = mutableListOf<Avviso>()
 
+    // Una possibile truffa non si notifica come urgente (16.2): la fretta è proprio quello che cerca.
     val urgenti = novita.urgenti
-        .filter { !it.letta }
+        .filter { !it.letta && !it.sospetta }
         .filter { chiaveUrgente(it.id) !in giaAvvisati }
     urgenti.take(MASSIMO_URGENTI_SINGOLE).forEach { mail ->
         avvisi += Avviso(

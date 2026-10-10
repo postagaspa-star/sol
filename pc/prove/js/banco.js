@@ -36,7 +36,7 @@ function mail(id, extra) {
     ricevuta_il: new Date(Date.UTC(2026, 9, 10, 8, 0, 0) - (5000 - id) * 60000).toISOString().replace('.000Z', '+00:00'),
     letta: false, risposta_data: false, gruppo_id: 1, gruppo: 'Clienti', da_rispondere: true,
     urgenza: 'normale', sicurezza: 0.6, smistamento: 'smistata', origine_smistamento: 'decisore',
-    applicata_in_casella: false, bozza: null, allegati: [], pec: null,
+    applicata_in_casella: false, bozza: null, allegati: [], pec: null, sospetta: false, incerti: [],
   }, extra || {});
 }
 
@@ -67,7 +67,7 @@ function server() {
     bozze: {},
     regole: [],
     caselle: [],
-    impostazioni: { modalita_prova: true, soglia_sicurezza: 0.85, giorni_risposta: 2, giorni_sollecito: 7, firma: 'Cordiali saluti', tono: 'cortese e diretto' },
+    impostazioni: { modalita_prova: true, soglia_sicurezza: 0.85, soglia_truffa: 0.5, giorni_risposta: 2, giorni_sollecito: 7, firma: 'Cordiali saluti', tono: 'cortese e diretto' },
     arretrato: 0,
     indietro: { aspettano_te: [], aspetti_tu: [] },
     testoSollecito: {},
@@ -104,6 +104,7 @@ function server() {
     da_rispondere: s.mails.filter((m) => m.da_rispondere && !m.risposta_data).length,
     urgenti: s.mails.filter((m) => m.urgenza === 'alta' && (!m.letta || m.da_rispondere)).length,
     da_controllare: s.mails.filter((m) => m.smistamento === 'da_controllare').length,
+    sospette: s.mails.filter((m) => m.sospetta).length,
     da_leggere: s.mails.filter((m) => !m.letta).length,
     bozze_pronte: Object.values(s.bozze).filter((b) => b.stato === 'pronta').length,
     gruppi: Object.fromEntries(s.gruppi.map((g) => [String(g.id), { da_leggere: s.mails.filter((m) => m.gruppo_id === g.id && !m.letta).length, totale: s.mails.filter((m) => m.gruppo_id === g.id).length }])),
@@ -142,6 +143,7 @@ function server() {
       if (qs.get('urgenza')) l = l.filter((x) => x.urgenza === qs.get('urgenza'));
       if (qs.get('letta')) l = l.filter((x) => !!x.letta === (qs.get('letta') === 'true'));
       if (qs.get('gruppo_id')) l = l.filter((x) => x.gruppo_id === Number(qs.get('gruppo_id')));
+      if (qs.get('sospetta') === 'true') l = l.filter((x) => x.sospetta);
       if (qs.get('prima_di')) { const i = l.findIndex((x) => x.id === Number(qs.get('prima_di'))); l = l.slice(i + 1); }
       const lim = Number(qs.get('limite') || 50);
       return [200, { mail: l.slice(0, lim).map(s.formaMail), altre: l.length > lim }];
@@ -150,6 +152,12 @@ function server() {
       const x = s.mails.find((y) => y.id === Number(m[1]));
       if (!x) return [404, { errore: 'Mail non trovata.', codice: 'non_trovato' }];
       return [200, Object.assign(s.formaMail(x), { destinatari: ['studio@esempio.it'], cc: [], corpo: 'Corpo della mail ' + x.id, probabilita: {} })];
+    }
+    if ((m = /^\/server\/api\/mail\/(\d+)\/sospetta$/.exec(p)) && metodo === 'POST') { // §16.2
+      const x = s.mails.find((y) => y.id === Number(m[1]));
+      if (!x) return [404, { errore: 'Mail non trovata.', codice: 'non_trovato' }];
+      x.sospetta = corpo.sospetta === true;
+      return [200, s.formaMail(x)];
     }
     if ((m = /^\/server\/api\/mail\/(\d+)\/(sposta|conferma|letta|rispondere|bozza)$/.exec(p)) && metodo === 'POST') {
       const x = s.mails.find((y) => y.id === Number(m[1]));
@@ -211,6 +219,7 @@ function server() {
     if (p === '/server/api/impostazioni' && metodo === 'GET') return [200, copia(s.impostazioni)];
     if (p === '/server/api/impostazioni' && metodo === 'PATCH') {
       if (corpo.giorni_risposta != null && (corpo.giorni_risposta < 1 || corpo.giorni_risposta > 60)) return [422, { errore: 'I giorni per ricordare le mail senza risposta vanno da 1 a 60.', codice: 'non_valido', campo: 'giorni_risposta' }];
+      if (corpo.soglia_truffa != null && (corpo.soglia_truffa < 0.2 || corpo.soglia_truffa > 0.9)) return [422, { errore: 'La soglia della possibile truffa va da 0,2 a 0,9.', codice: 'non_valido', campo: 'soglia_truffa' }];
       Object.assign(s.impostazioni, corpo);
       s.salute.modalita_prova = s.impostazioni.modalita_prova;
       return [200, copia(s.impostazioni)];

@@ -96,7 +96,12 @@ fun PostaScreen(vm: PostaViewModel, onApriMail: (Long) -> Unit, collegamentoNonP
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(NomiFiltri) { (filtro, nome) ->
+                        val filtri = if (stato.filtroTruffeVisibile) {
+                            listOf(FiltroRapido.SOSPETTE to "Possibili truffe") + NomiFiltri
+                        } else {
+                            NomiFiltri
+                        }
+                        items(filtri) { (filtro, nome) ->
                             // 15.4: il numero dice subito se vale la pena aprire il filtro.
                             val numero = stato.numero(filtro)
                             ChipScelta(
@@ -147,6 +152,7 @@ private fun testoVuoto(filtro: FiltroRapido) = when (filtro) {
     FiltroRapido.DA_RISPONDERE -> "Nessuna mail aspetta una risposta."
     FiltroRapido.URGENTI -> "Nessuna mail urgente."
     FiltroRapido.DA_CONTROLLARE -> "Niente da controllare: Sol è sicuro di tutti gli smistamenti."
+    FiltroRapido.SOSPETTE -> "Nessuna mail da chiarire: niente possibili truffe."
 }
 
 /** "Tutte" + i gruppi, col numero delle mail da leggere. */
@@ -168,6 +174,7 @@ private fun SceltaGruppo(gruppi: List<Pair<Long, Pair<String, Int>>>, scelto: Lo
 @Composable
 fun RigaMail(mail: Mail, onClick: () -> Unit, nota: String? = null) {
     val descrizione = buildString {
+        if (mail.sospetta) append("Possibile truffa. ")
         append(if (mail.letta) "" else "Non letta. ")
         append("Da ${mail.mittente.etichetta}. ${mail.oggetto}.")
         if (mail.urgente) append(" Urgente.")
@@ -223,6 +230,8 @@ fun RigaMail(mail: Mail, onClick: () -> Unit, nota: String? = null) {
                 )
             }
             val segni = buildList {
+                // 16.3: prima di tutte le altre.
+                if (mail.sospetta) add(TipoSegno.TRUFFA)
                 if (mail.urgente) add(TipoSegno.URGENTE)
                 if (mail.daRispondere && !mail.rispostaData) add(TipoSegno.DA_RISPONDERE)
                 if (mail.bozzaPronta) add(TipoSegno.BOZZA_PRONTA)

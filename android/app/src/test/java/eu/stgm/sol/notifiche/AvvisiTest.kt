@@ -42,6 +42,12 @@ class AvvisiTest {
     }
 
     @Test
+    fun `una possibile truffa non si notifica come urgente`() {
+        val n = Novita(cursore = "2", urgenti = listOf(rossi.copy(id = 820, sospetta = true)))
+        assertTrue(avvisiDaMostrare(n, emptySet(), primoGiro = false).isEmpty())
+    }
+
+    @Test
     fun `urgente gia letta o gia avvisata no`() {
         val n = Novita(cursore = "2", urgenti = listOf(urgente(1, letta = true), urgente(2)))
         assertTrue(avvisiDaMostrare(n, setOf("urgente:2"), primoGiro = false).isEmpty())

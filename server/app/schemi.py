@@ -58,6 +58,10 @@ class RispondereIn(Corpo):
     da_rispondere: StrictBool
 
 
+class SospettaIn(Corpo):
+    sospetta: StrictBool
+
+
 class IstruzioniIn(Corpo):
     istruzioni: str | None = Field(default=None, max_length=2000)
     # Contratto 15.13: senza istruzioni, una bozza modificata a mano si rifà da zero solo
@@ -114,3 +118,4 @@ class ImpostazioniPatch(Corpo):
     tono: str | None = Field(default=None, min_length=1, max_length=100)
     scrittori: list[Literal["groq", "cerebras", "locale"]] | None = Field(default=None, min_length=1, max_length=3)
     conserva_giorni: int | None = Field(default=None, ge=7, le=3650)
+    soglia_truffa: float | None = Field(default=None, ge=0.2, le=0.9)

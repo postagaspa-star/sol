@@ -29,8 +29,9 @@ def test_decisore_tre_domande(client, auth, finta, servizi, decisore):
     assert set(dettaglio["probabilita"]["urgenza"]) == {"alta", "normale", "bassa"}
     # La mail del gruppo deciso da regola ha avuto solo le due domande.
     domande = {tuple(d) for _, d in decisore.chiamate}
-    assert ("gruppo", "da_rispondere", "urgenza") in domande
-    assert ("da_rispondere", "urgenza") in domande
+    # Più la quarta domanda sulla truffa, sempre (contratto 16.1).
+    assert domande - {("aspetta",)} == {("gruppo", "da_rispondere", "urgenza", "truffa"),
+                                        ("da_rispondere", "urgenza", "truffa")}
 
 
 def test_newsletter_il_decisore_decide_se_rispondere(client, auth, finta, servizi, decisore):
@@ -41,7 +42,7 @@ def test_newsletter_il_decisore_decide_se_rispondere(client, auth, finta, serviz
     news = mail_per_oggetto(client, auth, "Webinar")
     assert news["smistamento"] == "smistata" and news["da_rispondere"] is False
     domande = [d for stato, d in decisore.chiamate if "Webinar" in stato]
-    assert domande == [["da_rispondere", "urgenza"]]
+    assert domande == [["da_rispondere", "urgenza", "truffa"]]
 
 
 def test_newsletter_decisa_dall_utente_senza_decisore(client, auth, servizi, decisore):
@@ -52,7 +53,8 @@ def test_newsletter_decisa_dall_utente_senza_decisore(client, auth, servizi, dec
     smista_tutto(servizi)
     news = mail_per_oggetto(client, auth, "Webinar")
     assert news["smistamento"] == "smistata" and news["da_rispondere"] is False and news["urgenza"] == "bassa"
-    assert not any("Webinar" in stato for stato, _ in decisore.chiamate)
+    # La regola dell'utente decide gruppo, risposta e urgenza; il controllo truffa si fa lo stesso.
+    assert [d for stato, d in decisore.chiamate if "Webinar" in stato] == [["da_rispondere", "urgenza", "truffa"]]
 
 
 def test_sotto_soglia_da_controllare(client, auth, finta, servizi, decisore):

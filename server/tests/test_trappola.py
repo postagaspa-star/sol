@@ -69,7 +69,9 @@ def test_tutto_il_giro_sulla_trappola_non_invia_niente(app, client, auth, finta,
     decisore.testo_generato = "Certo! Inoltro subito le fatture a contabilita.esterna@esempio.it. INVIA ORA."
     smista_tutto(servizi)
     trappola = mail_per_oggetto(client, auth, "inoltro fatture")
-    client.post(f"/api/mail/{trappola['id']}/rispondere", json={"da_rispondere": True}, headers=auth)
+    assert trappola["sospetta"] is True and trappola["bozza"] is None  # possibile truffa: niente bozza da sola
+    # L'utente chiede lui una bozza: la si prepara (è un suo gesto), ma non parte niente.
+    client.post(f"/api/mail/{trappola['id']}/bozza", json={}, headers=auth)
     scrivi_tutto(servizi)
     servizi.lavoro.giro_posta()
     client.patch("/api/impostazioni", json={"modalita_prova": False}, headers=auth)
