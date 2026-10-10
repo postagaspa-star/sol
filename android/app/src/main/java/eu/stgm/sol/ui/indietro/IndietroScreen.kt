@@ -9,13 +9,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +27,7 @@ import eu.stgm.sol.dati.Bozza
 import eu.stgm.sol.ui.AvvisoLettura
 import eu.stgm.sol.ui.BarraCaricamento
 import eu.stgm.sol.ui.DialogoErrore
+import eu.stgm.sol.ui.FasciaCalda
 import eu.stgm.sol.ui.FilaPulsanti
 import eu.stgm.sol.ui.PulsanteImpostazioni
 import eu.stgm.sol.ui.PulsantePieno
@@ -39,8 +38,8 @@ import eu.stgm.sol.ui.TitoloSezione
 import eu.stgm.sol.ui.Vuoto
 import eu.stgm.sol.ui.giorni
 import eu.stgm.sol.ui.posta.RigaMail
+import eu.stgm.sol.ui.tema.ColoreGruppo
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IndietroScreen(vm: IndietroViewModel, onApriMail: (Long) -> Unit, onApriBozza: (id: Long, appena: Bozza?) -> Unit) {
     val stato by vm.stato.collectAsStateWithLifecycle()
@@ -58,13 +57,10 @@ fun IndietroScreen(vm: IndietroViewModel, onApriMail: (Long) -> Unit, onApriBozz
     }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Niente resta indietro") },
-            actions = {
-                IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
-                PulsanteImpostazioni()
-            },
-        )
+        FasciaCalda("Niente resta indietro") {
+            IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
+            PulsanteImpostazioni()
+        }
         BarraCaricamento(stato.caricamento || stato.inCorso)
         val dati = stato.dati
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -80,8 +76,14 @@ fun IndietroScreen(vm: IndietroViewModel, onApriMail: (Long) -> Unit, onApriBozz
                 item { Vuoto("Nessuna mail aspetta da troppo tempo.", Modifier.padding(horizontal = 8.dp)) }
             }
             items(dati.aspettanoTe, key = { "te-" + it.mail.id }) { voce ->
-                RigaMail(voce.mail, onClick = { onApriMail(voce.mail.id) }, nota = "Aspetta da ${giorni(voce.giorni)}")
-                FilaPulsanti(Modifier.padding(start = 36.dp, end = 16.dp, bottom = 8.dp)) {
+                RigaMail(
+                    voce.mail,
+                    onClick = { onApriMail(voce.mail.id) },
+                    colore = ColoreGruppo.daNome(stato.gruppi.firstOrNull { it.id == voce.mail.gruppoId }?.colore),
+                    conGruppo = true,
+                    nota = "Aspetta da ${giorni(voce.giorni)}",
+                )
+                FilaPulsanti(Modifier.padding(start = 68.dp, end = 16.dp, bottom = 8.dp)) {
                     PulsanteVuoto("Rispondi", onClick = { onApriMail(voce.mail.id) })
                     PulsanteTesto("Non serve", onClick = { vm.nonServeRisposta(voce.mail.id) }, abilitato = !stato.inCorso)
                 }

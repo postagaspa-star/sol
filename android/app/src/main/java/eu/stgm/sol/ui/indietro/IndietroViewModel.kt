@@ -4,19 +4,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.stgm.sol.dati.Bozza
 import eu.stgm.sol.dati.Cache
+import eu.stgm.sol.dati.Gruppo
 import eu.stgm.sol.dati.Indietro
 import eu.stgm.sol.dati.leggiConCache
 import eu.stgm.sol.rete.Esito
 import eu.stgm.sol.rete.SolClient
 import eu.stgm.sol.rete.messaggio
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
 
 data class StatoIndietro(
     val dati: Indietro? = null,
+    /** Per i colori delle righe (docs/aspetto.md): il cerchio ha il colore del gruppo. */
+    val gruppi: List<Gruppo> = emptyList(),
     val caricamento: Boolean = false,
     val inCorso: Boolean = false,
     val errore: String? = null,
@@ -35,9 +40,17 @@ class IndietroViewModel(private val client: SolClient, private val cache: Cache)
     fun carica() {
         _stato.update { it.copy(caricamento = true) }
         viewModelScope.launch {
+            val gruppi = async { leggiConCache(cache, "gruppi", ListSerializer(Gruppo.serializer())) { client.gruppi() } }
             val l = leggiConCache(cache, "indietro", Indietro.serializer()) { client.indietro() }
+            val g = gruppi.await()
             _stato.update {
-                it.copy(dati = l.dato ?: it.dati, caricamento = false, errore = l.errore, daCacheDel = l.daCacheDel)
+                it.copy(
+                    dati = l.dato ?: it.dati,
+                    gruppi = g.dato ?: it.gruppi,
+                    caricamento = false,
+                    errore = l.errore,
+                    daCacheDel = l.daCacheDel,
+                )
             }
         }
     }

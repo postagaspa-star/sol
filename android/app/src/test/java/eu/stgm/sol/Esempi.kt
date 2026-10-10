@@ -83,6 +83,15 @@ object Esempi {
       {"id": 6, "nome": "Altro", "ordine": 6, "cartella": "Sol/Altro", "da_leggere": 1, "totale": 9}
     ]"""
 
+    /** I gruppi col colore e la frase per Sol (contratto 15.14 e 17). */
+    const val GRUPPI_COLORATI = """[
+      {"id": 1, "nome": "Clienti", "ordine": 1, "colore": "blu", "descrizione": "un cliente chiede o conferma un lavoro", "da_leggere": 4, "totale": 120},
+      {"id": 2, "nome": "Fornitori", "ordine": 2, "colore": "verde", "descrizione": "offerte, ordini e consegne dei fornitori", "totale": 40},
+      {"id": 3, "nome": "Amministrazione e fatture", "ordine": 3, "colore": "ambra", "descrizione": "fatture, pagamenti, banca", "totale": 31},
+      {"id": 4, "nome": "PEC ed enti", "ordine": 4, "colore": "viola", "descrizione": "PEC, Comune, Agenzia delle Entrate", "totale": 12},
+      {"id": 6, "nome": "Altro", "ordine": 6, "colore": "ardesia", "descrizione": "tutto quello che non va negli altri gruppi", "da_leggere": 1, "totale": 9}
+    ]"""
+
     fun impostazioni(prova: Boolean = true) = """{"modalita_prova": $prova, "soglia_sicurezza": 0.85, "giorni_risposta": 2,
       "giorni_sollecito": 7, "intervallo_controllo_minuti": 5, "firma": "Cordiali saluti\nManuel",
       "tono": "cortese e diretto", "scrittori": ["groq", "cerebras", "locale"], "conserva_giorni": 180}"""

@@ -6,7 +6,25 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import eu.stgm.sol.ui.tema.ColoreGruppo
+import eu.stgm.sol.ui.tema.LocalSegni
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,12 +32,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,10 +46,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,11 +79,13 @@ import eu.stgm.sol.ui.AvvisoLettura
 import eu.stgm.sol.ui.BarraCaricamento
 import eu.stgm.sol.ui.DialogoConferma
 import eu.stgm.sol.ui.DialogoErrore
+import eu.stgm.sol.ui.FasciaCalda
 import eu.stgm.sol.ui.FilaPulsanti
 import eu.stgm.sol.ui.PulsantePieno
 import eu.stgm.sol.ui.PulsanteTesto
 import eu.stgm.sol.ui.PulsanteVuoto
 import eu.stgm.sol.ui.Riquadro
+import eu.stgm.sol.ui.Superficie
 import eu.stgm.sol.ui.TitoloSezione
 import eu.stgm.sol.ui.quandoCompleto
 import kotlinx.coroutines.launch
@@ -106,15 +122,9 @@ fun ImpostazioniScreen(
     LaunchedEffect(stato.scollegato) { if (stato.scollegato) onScollegato() }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Impostazioni") },
-            navigationIcon = {
-                IconButton(onClick = onIndietro) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                }
-            },
-            actions = { IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") } },
-        )
+        FasciaCalda("Impostazioni", indietro = onIndietro) {
+            IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
+        }
         BarraCaricamento(stato.caricamento || stato.inCorso)
         Column(
             Modifier
@@ -180,6 +190,7 @@ fun ImpostazioniScreen(
                     abilitato = !stato.inCorso,
                     onRinomina = { dialogo = "rinomina:${g.id}" },
                     onDescrizione = { dialogo = "descrizione:${g.id}" },
+                    onColore = { dialogo = "colore:${g.id}" },
                     onTogli = if (g.nome.equals("Altro", ignoreCase = true)) {
                         null
                     } else {
@@ -208,7 +219,7 @@ fun ImpostazioniScreen(
             TitoloSezione("Regole imparate")
             if (stato.regole.isEmpty()) {
                 Text(
-                    "Ancora nessuna. Quando sposti una mail con «Ricordati questo mittente», Sol crea una regola qui.",
+                    "Ancora nessuna. Quando sposti una mail con «Ricorda questo mittente», Sol crea una regola qui.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -368,6 +379,16 @@ fun ImpostazioniScreen(
                 }
             }
         }
+        dialogo?.startsWith("colore:") == true -> {
+            val id = dialogo!!.removePrefix("colore:").toLongOrNull()
+            val gruppo = stato.gruppi.firstOrNull { it.id == id }
+            if (gruppo != null) {
+                DialogoColore(gruppo) { colore ->
+                    dialogo = null
+                    colore?.let { vm.cambiaColoreGruppo(gruppo.id, it.nome) }
+                }
+            }
+        }
         dialogo?.startsWith("rinomina:") == true -> {
             val id = dialogo!!.removePrefix("rinomina:").toLongOrNull()
             val gruppo = stato.gruppi.firstOrNull { it.id == id }
@@ -425,11 +446,7 @@ private fun RigaCasella(
     onRicollega: (() -> Unit)?,
     onTogli: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-    ) {
+    Superficie(Modifier.padding(vertical = 4.dp)) {
         Column(Modifier.padding(14.dp)) {
             val tipo = when (c.tipo) {
                 "gmail" -> "Gmail"
@@ -459,10 +476,38 @@ private fun RigaGruppo(
     abilitato: Boolean,
     onRinomina: () -> Unit,
     onDescrizione: () -> Unit,
+    onColore: () -> Unit,
     onTogli: (() -> Unit)?,
 ) {
+    val colore = ColoreGruppo.daNome(g.colore)
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text(g.nome, style = MaterialTheme.typography.bodyLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(g.nome, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            // Il colore si cambia toccandolo: pallino + nome, come una piccola scelta.
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(enabled = abilitato, role = Role.Button, onClickLabel = "Cambia colore", onClick = onColore)
+                    .heightIn(min = 48.dp)
+                    .semantics(mergeDescendants = true) { contentDescription = "Colore di ${g.nome}: ${colore.nome}" }
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(18.dp).background(colore.punto, CircleShape))
+                Text(
+                    colore.nome,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = LocalSegni.current.accentoTesto,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = LocalSegni.current.accentoTesto,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         Text(
             g.descrizione?.takeIf { it.isNotBlank() }?.let { "«$it»" } ?: "Nessuna frase: Sol usa solo il nome.",
             style = MaterialTheme.typography.bodyMedium,
@@ -779,6 +824,49 @@ private fun DialogoNuovoGruppo(onAggiungi: (String, String) -> Unit, onAnnulla: 
         },
         confirmButton = { PulsantePieno("Aggiungi", { onAggiungi(nome, descrizione) }, abilitato = nome.isNotBlank()) },
         dismissButton = { PulsanteTesto("Annulla", onAnnulla) },
+    )
+}
+
+/** I 12 colori della guida: toccarne uno lo sceglie. Ogni cerchio ha anche il nome scritto. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DialogoColore(gruppo: Gruppo, onFine: (ColoreGruppo?) -> Unit) {
+    val attuale = ColoreGruppo.daNome(gruppo.colore)
+    AlertDialog(
+        onDismissRequest = { onFine(null) },
+        title = { Text("Colore di «${gruppo.nome}»") },
+        text = {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = 4,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                ColoreGruppo.entries.forEach { c ->
+                    val scelto = c == attuale
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clickable(role = Role.RadioButton) { onFine(c) }
+                            .semantics { selected = scelto }
+                            .padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(Modifier.size(44.dp).background(c.base, CircleShape), contentAlignment = Alignment.Center) {
+                            if (scelto) Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White)
+                        }
+                        Text(
+                            c.nome,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (scelto) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { PulsanteTesto("Annulla", { onFine(null) }) },
     )
 }
 

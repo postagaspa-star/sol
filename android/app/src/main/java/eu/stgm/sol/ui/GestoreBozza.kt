@@ -62,6 +62,8 @@ data class StatoBozza(
     val verificaInvio: Boolean = false,
     /** Rifare senza istruzioni una bozza modificata a mano: prima si chiede se buttare le modifiche. */
     val chiediDaZero: Boolean = false,
+    /** Sol ha appena ricevuto la richiesta di (ri)scrivere la risposta: "Sol sta scrivendo..." da subito. */
+    val richiestaRisposta: Boolean = false,
     val messaggio: String? = null,
     val errore: String? = null,
 ) {
@@ -71,6 +73,15 @@ data class StatoBozza(
     val campiBloccati: Boolean get() = confermaInvio != null || preparazioneConferma || inCorso || verificaInvio
 
     val invioPossibile: Boolean get() = !campiBloccati && !inModifica && bozza?.inviabile == true
+
+    /** Quello che si vede nella risposta: il testo in modifica, o quello della bozza. */
+    val campiVisibili: CampiBozza? get() = campi ?: bozza?.let { CampiBozza.da(it) }
+
+    /** C'è testo scritto sul telefono e non ancora salvato sul server. */
+    val modificheNonSalvate: Boolean get() = bozza != null && campi != null && campi != CampiBozza.da(bozza)
+
+    /** Si può scrivere direttamente nella risposta (docs/aspetto.md §3). */
+    val scrivibile: Boolean get() = bozza != null && !bozza.chiusa && !bozza.inPreparazione && !campiBloccati
 }
 
 /**
@@ -210,6 +221,18 @@ class GestoreBozza(
         ricordaCampi(bozza.id, campi)
     }
 
+    /**
+     * Si scrive direttamente nella risposta, senza "Modifica": il primo tasto apre la
+     * modifica e ogni tasto è salvato sul telefono, come prima.
+     */
+    fun scrivi(campi: CampiBozza) {
+        val stato = _stato.value
+        val bozza = stato.bozza ?: return
+        if (!stato.scrivibile) return
+        _stato.update { it.copy(campi = campi) }
+        ricordaCampi(bozza.id, campi)
+    }
+
     fun annullaModifica() {
         val id = _stato.value.bozza?.id
         _stato.update { it.copy(campi = null) }
@@ -288,7 +311,7 @@ class GestoreBozza(
     fun annullaDaZero() = _stato.update { it.copy(chiediDaZero = false) }
 
     private fun avviaRifai(bozzaId: Long, istruzioni: String?, daZero: Boolean) {
-        _stato.update { it.copy(inCorso = true, errore = null, campi = null, confermaInvio = null) }
+        _stato.update { it.copy(inCorso = true, errore = null, campi = null, confermaInvio = null, richiestaRisposta = true) }
         ambito.launch {
             dopoRifai(client.rifaiBozza(bozzaId, istruzioni?.trim(), daZero))
         }
@@ -296,7 +319,7 @@ class GestoreBozza(
 
     /** Una risposta per una mail che non ne ha (o ne ha solo di scartate). */
     fun preparaPerMail(mailId: Long, istruzioni: String?) {
-        _stato.update { it.copy(inCorso = true, errore = null, campi = null, confermaInvio = null) }
+        _stato.update { it.copy(inCorso = true, errore = null, campi = null, confermaInvio = null, richiestaRisposta = true) }
         ambito.launch {
             dopoRifai(client.preparaRisposta(mailId, istruzioni?.trim()))
         }
@@ -307,10 +330,12 @@ class GestoreBozza(
             is Esito.Ok -> {
                 ferma()
                 memoria.cancella(chiaveCampi(esito.dato.id))
-                _stato.update { it.copy(bozza = esito.dato, inCorso = false, messaggio = "Sol sta riscrivendo la bozza.") }
+                _stato.update {
+                    it.copy(bozza = esito.dato, inCorso = false, richiestaRisposta = false, messaggio = "Sol sta riscrivendo la bozza.")
+                }
                 if (esito.dato.inPreparazione) aspettaChePronta(esito.dato.id)
             }
-            else -> _stato.update { it.copy(inCorso = false, errore = esito.messaggio) }
+            else -> _stato.update { it.copy(inCorso = false, richiestaRisposta = false, errore = esito.messaggio) }
         }
     }
 
@@ -361,6 +386,42 @@ class GestoreBozza(
             return
         }
         preparaConferma(bozza.id, cambiata = false)
+    }
+
+    /**
+     * "Invia →" della barra in basso: le modifiche scritte si salvano prima (stessi
+     * controlli di "Salva"), poi parte lo stesso primo tempo di sempre: si rilegge la
+     * bozza e si chiede il sì con la versione riletta. Da qui non parte niente.
+     */
+    fun inviaDallaBarra() {
+        val stato = _stato.value
+        if (stato.bozza == null || stato.campiBloccati) return
+        when {
+            stato.modificheNonSalvate -> salvaModifica(poi = ::chiediInvio)
+            stato.inModifica -> {
+                annullaModifica()
+                chiediInvio()
+            }
+            else -> chiediInvio()
+        }
+    }
+
+    /**
+     * "Rifai" della barra in basso: le modifiche scritte si salvano prima, così Sol
+     * parte anche da quelle. [rifai] è il rifare della pagina (o il preparare, se la
+     * risposta non c'è ancora).
+     */
+    fun rifaiDallaBarra(istruzioni: String?, rifai: (String?) -> Unit) {
+        val stato = _stato.value
+        if (stato.campiBloccati) return
+        when {
+            stato.modificheNonSalvate -> salvaModifica(poi = { rifai(istruzioni) })
+            stato.inModifica -> {
+                annullaModifica()
+                rifai(istruzioni)
+            }
+            else -> rifai(istruzioni)
+        }
     }
 
     /** Dopo una rotazione con la finestra aperta: la si ricostruisce rileggendo la bozza. */

@@ -66,7 +66,16 @@ class DettaglioViewModel(
         dopoInvio = ::dopoInvio,
     )
 
+    // Aprire una mail la segna letta (docs/aspetto.md §3), una volta per apertura e
+    // solo se nel frattempo Manuel non ha toccato lui "letta / da leggere".
+    private var daSegnareLetta = false
+
+    // Manuel ha usato "Segna come da leggere" durante l'apertura: vince lui.
+    private var lettaToccata = false
+
     fun apri(mailId: Long) {
+        daSegnareLetta = true
+        lettaToccata = false
         if (_stato.value.mailId == mailId && _stato.value.mail != null) {
             // La stessa mail riaperta: si mostra subito e si rilegge (può essere cambiata).
             bozza.riprendi()
@@ -103,6 +112,20 @@ class DettaglioViewModel(
             }
             // Senza rete la bozza non si legge: meglio nessuna che una vecchia da inviare.
             if (mail.daCacheDel == null) bozza.imposta(mail.dato?.bozza?.id)
+            val letta = mail.dato
+            if (letta != null && mail.daCacheDel == null && daSegnareLetta) {
+                daSegnareLetta = false
+                if (!letta.letta) segnaLettaAprendo(letta.id)
+            }
+        }
+    }
+
+    /** In silenzio: se non riesce, la mail resta da leggere e ci si riprova alla prossima apertura. */
+    private fun segnaLettaAprendo(id: Long) {
+        viewModelScope.launch {
+            if (client.segnaLetta(id, true) !is Esito.Ok) return@launch
+            val mail = _stato.value.mail ?: return@launch
+            if (mail.id == id && !lettaToccata) aggiorna(mail.copy(letta = true))
         }
     }
 
@@ -148,6 +171,7 @@ class DettaglioViewModel(
     fun cambiaLetta() {
         val mail = _stato.value.mail ?: return
         val letta = !mail.letta
+        lettaToccata = true
         azione {
             when (val esito = client.segnaLetta(mail.id, letta)) {
                 is Esito.Ok -> {
@@ -215,6 +239,9 @@ class DettaglioViewModel(
         val attuale = bozza.stato.value.bozza
         if (attuale == null || attuale.stato == Bozza.SCARTATA) bozza.preparaPerMail(mail.id, istruzioni) else bozza.rifai(istruzioni)
     }
+
+    /** "Prepara la risposta" della barra in basso: subito, senza istruzioni (poi c'è "Rifai"). */
+    fun preparaRisposta() = rifaiBozza(null)
 
     /** Prima di aprire un'altra mail (da una notifica): c'è testo scritto e non salvato? */
     fun haModificheNonSalvate(): Boolean = bozza.haModificheNonSalvate()

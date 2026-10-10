@@ -23,7 +23,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +41,7 @@ import eu.stgm.sol.dati.Scadenza
 import eu.stgm.sol.ui.AvvisoLettura
 import eu.stgm.sol.ui.BarraCaricamento
 import eu.stgm.sol.ui.DialogoErrore
+import eu.stgm.sol.ui.FasciaCalda
 import eu.stgm.sol.ui.FilaPulsanti
 import eu.stgm.sol.ui.PulsanteImpostazioni
 import eu.stgm.sol.ui.PulsantePieno
@@ -77,13 +77,10 @@ fun ScadenzeScreen(vm: ScadenzeViewModel, onApriMail: (Long) -> Unit) {
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TopAppBar(
-                title = { Text("Scadenze") },
-                actions = {
-                    IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
-                    PulsanteImpostazioni()
-                },
-            )
+            FasciaCalda("Scadenze") {
+                IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
+                PulsanteImpostazioni()
+            }
             BarraCaricamento(stato.caricamento || stato.inCorso)
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
                 item {

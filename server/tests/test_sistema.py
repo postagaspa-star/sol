@@ -9,10 +9,10 @@ def test_versione_senza_token(client):
     assert r.status_code == 200
     # Senza file nella cartella APK l'impronta non c'è (contratto 15.10).
     assert r.json() == {
-        "server": "1.0.0",
-        "android": {"codice": 1, "nome": "1.0.0", "sha256": None, "byte": None},
-        "pc": {"codice": 1, "nome": "1.0.0", "sha256": None, "byte": None},
-        "nota": "Prima versione di Sol.",
+        "server": "1.1.0",
+        "android": {"codice": 2, "nome": "1.1.0", "sha256": None, "byte": None},
+        "pc": {"codice": 2, "nome": "1.1.0", "sha256": None, "byte": None},
+        "nota": "Nuovo aspetto: gruppi colorati, riquadro Da fare, mail aperta con la risposta in evidenza e barra Invia, gesti veloci; segnale di possibile truffa.",
     }
 
 
@@ -50,16 +50,16 @@ def test_versione_file_rotto_usa_i_valori_di_base(ambiente, orologio, decisore, 
     collega_finti(app, decisore)
     with TestClient(app) as c:
         dati = c.get("/api/versione").json()
-    assert dati["server"] == "1.0.0" and dati["android"]["codice"] == 1
+    assert dati["server"] == "1.1.0" and dati["android"]["codice"] == 1
 
 
 def test_salute_senza_token_e_ridotta(client):
-    assert client.get("/api/salute").json() == {"ok": True, "versione": "1.0.0", "autenticato": False}
+    assert client.get("/api/salute").json() == {"ok": True, "versione": "1.1.0", "autenticato": False}
 
 
 def test_salute_token_sbagliato_e_ridotta(client):
     r = client.get("/api/salute", headers={"Authorization": "Bearer sbagliato"})
-    assert r.json() == {"ok": True, "versione": "1.0.0", "autenticato": False}
+    assert r.json() == {"ok": True, "versione": "1.1.0", "autenticato": False}
 
 
 def test_salute_token_revocato_non_autenticato(client, app, auth):
@@ -179,5 +179,5 @@ def test_versioni_json_coerente():
     from pathlib import Path
 
     dati = json.loads((Path(__file__).resolve().parents[1] / "app" / "versioni.json").read_text(encoding="utf-8"))
-    assert dati["server"] == "1.0.0"
-    assert dati["android"] == {"codice": 1, "nome": "1.0.0"} and dati["pc"] == {"codice": 1, "nome": "1.0.0"}
+    assert dati["server"] == "1.1.0"
+    assert dati["android"] == {"codice": 2, "nome": "1.1.0"} and dati["pc"] == {"codice": 2, "nome": "1.1.0"}

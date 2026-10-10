@@ -391,4 +391,88 @@ class GestoreBozzaTest {
         assertFalse("salvata: niente testo in sospeso", gestore.haModificheNonSalvate())
         assertNotNull(gestore.stato.value.bozza)
     }
+
+    // --- Scrivere direttamente nella risposta e la barra in basso (docs/aspetto.md §3) --------
+
+    @Test
+    fun `scrivere nella risposta apre la modifica e la salva sul telefono a ogni tasto`() {
+        bozzaPronta()
+        val campi = gestore.stato.value.campiVisibili!!
+        assertFalse(gestore.stato.value.inModifica)
+        gestore.scrivi(campi.copy(testo = "Buongiorno Mario,\ngiovedì va bene."))
+        assertTrue(gestore.stato.value.inModifica)
+        assertTrue(gestore.stato.value.modificheNonSalvate)
+        assertTrue("salvata in locale", memoria.leggi("campi-55")!!.json.contains("giovedì va bene"))
+
+        val dopo = nuovoGestore()
+        dopo.imposta(55)
+        aspetta { dopo.stato.value.bozza != null }
+        assertEquals("ritrovata dopo un riavvio", "Buongiorno Mario,\ngiovedì va bene.", dopo.stato.value.campi?.testo)
+    }
+
+    @Test
+    fun `durante la conferma non si scrive`() {
+        bozzaPronta()
+        apriConferma()
+        gestore.scrivi(gestore.stato.value.campiVisibili!!.copy(testo = "cambiato di nascosto"))
+        assertFalse(gestore.stato.value.inModifica)
+        assertEquals("Buongiorno Mario,\nl'offerta arriva giovedì.", gestore.stato.value.campiVisibili!!.testo)
+    }
+
+    @Test
+    fun `Invia della barra - prima salva le modifiche, poi rilegge e chiede il si, non invia da sola`() {
+        bozzaPronta()
+        gestore.scrivi(gestore.stato.value.campiVisibili!!.copy(testo = "Buongiorno Mario,\ngiovedì va bene."))
+        server.rispondi("PUT /api/bozze/55", Esempi.bozza(testo = "Buongiorno Mario,\ngiovedì va bene.", versione = 4, modificata = true))
+        server.rispondi("GET /api/bozze/55", Esempi.bozza(testo = "Buongiorno Mario,\ngiovedì va bene.", versione = 4, modificata = true))
+        server.rispondi("POST /api/bozze/55/invia", Esempi.bozza("inviata", versione = 4))
+        val letturePrima = server.richiesteA("GET /api/bozze/55").size
+
+        gestore.inviaDallaBarra()
+        aspetta("conferma") { gestore.stato.value.confermaInvio != null }
+        assertTrue(server.richiesteA("PUT /api/bozze/55").single().body.readUtf8().contains("giovedì va bene"))
+        assertTrue("riletta dopo il salvataggio", server.richiesteA("GET /api/bozze/55").size > letturePrima)
+        assertEquals(4, gestore.stato.value.confermaInvio!!.versione)
+        assertFalse(gestore.stato.value.inModifica)
+        assertTrue("senza il sì non parte niente", invii.isEmpty())
+
+        gestore.confermaInvio()
+        aspetta { gestore.stato.value.bozza?.stato == "inviata" }
+        assertEquals("""{"conferma":true,"versione":4}""", invii.single().body.readUtf8())
+    }
+
+    @Test
+    fun `Invia della barra - senza modifiche e solo il primo tempo di sempre`() {
+        bozzaPronta()
+        gestore.scrivi(gestore.stato.value.campiVisibili!!) // tocco senza cambiare niente
+        gestore.inviaDallaBarra()
+        aspetta { gestore.stato.value.confermaInvio != null }
+        assertTrue(server.richiesteA("PUT /api/bozze/55").isEmpty())
+        assertFalse(gestore.stato.value.inModifica)
+        assertTrue(invii.isEmpty())
+    }
+
+    @Test
+    fun `Invia della barra - un indirizzo sbagliato ferma tutto prima del server`() {
+        bozzaPronta()
+        gestore.scrivi(gestore.stato.value.campiVisibili!!.copy(a = "rossi-senza-chiocciola"))
+        gestore.inviaDallaBarra()
+        assertTrue(gestore.stato.value.errore!!.contains("rossi-senza-chiocciola"))
+        Thread.sleep(50)
+        assertTrue(server.richiesteA("PUT /api/bozze/55").isEmpty())
+        assertNull(gestore.stato.value.confermaInvio)
+        assertTrue("il testo scritto resta", gestore.stato.value.inModifica)
+    }
+
+    @Test
+    fun `Rifai della barra - le modifiche si salvano prima, cosi Sol parte anche da quelle`() {
+        bozzaPronta()
+        gestore.scrivi(gestore.stato.value.campiVisibili!!.copy(testo = "Buongiorno Mario,\nci vediamo giovedì."))
+        server.rispondi("PUT /api/bozze/55", Esempi.bozza(testo = "Buongiorno Mario,\nci vediamo giovedì.", modificata = true))
+        server.rispondi("POST /api/bozze/55/rifai", Esempi.bozza("in_preparazione"), 202)
+        gestore.rifaiDallaBarra("più breve", gestore::rifai)
+        aspetta { server.richiesteA("POST /api/bozze/55/rifai").isNotEmpty() }
+        assertEquals(1, server.richiesteA("PUT /api/bozze/55").size)
+        assertEquals("""{"istruzioni":"più breve"}""", server.richiesteA("POST /api/bozze/55/rifai").single().body.readUtf8())
+    }
 }

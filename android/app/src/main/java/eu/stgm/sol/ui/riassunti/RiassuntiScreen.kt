@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -20,9 +19,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,10 +33,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.sol.dati.Riassunto
 import eu.stgm.sol.ui.AvvisoLettura
 import eu.stgm.sol.ui.BarraCaricamento
+import eu.stgm.sol.ui.FasciaCalda
 import eu.stgm.sol.ui.PulsanteImpostazioni
 import eu.stgm.sol.ui.PulsantePieno
 import eu.stgm.sol.ui.PulsanteTesto
 import eu.stgm.sol.ui.Riquadro
+import eu.stgm.sol.ui.Superficie
 import eu.stgm.sol.ui.TitoloSezione
 import eu.stgm.sol.ui.dettaglio.AIUTO_DETTATURA
 import eu.stgm.sol.ui.quandoCompleto
@@ -57,13 +56,10 @@ fun RiassuntiScreen(vm: RiassuntiViewModel, onApriMail: (Long) -> Unit) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Riassunti") },
-            actions = {
-                IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
-                PulsanteImpostazioni()
-            },
-        )
+        FasciaCalda("Riassunti") {
+            IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
+            PulsanteImpostazioni()
+        }
         BarraCaricamento(stato.caricamento)
         Column(
             Modifier
@@ -164,11 +160,7 @@ private fun TestoRiassunto(testo: String, onApriMail: (Long) -> Unit) {
 
 @Composable
 private fun Riquadrato(modifier: Modifier = Modifier, contenuto: @Composable () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier.fillMaxWidth(),
-    ) { Column(Modifier.padding(16.dp)) { contenuto() } }
+    Superficie(modifier) { Column(Modifier.padding(16.dp)) { contenuto() } }
 }
 
 @Composable

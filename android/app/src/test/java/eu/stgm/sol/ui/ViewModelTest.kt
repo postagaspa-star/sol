@@ -17,6 +17,7 @@ import eu.stgm.sol.ui.dettaglio.DettaglioViewModel
 import eu.stgm.sol.ui.impostazioni.ImpostazioniViewModel
 import eu.stgm.sol.ui.indietro.IndietroViewModel
 import eu.stgm.sol.ui.posta.PostaViewModel
+import eu.stgm.sol.ui.posta.VoceDaFare
 import eu.stgm.sol.ui.riassunti.RiassuntiViewModel
 import eu.stgm.sol.ui.scadenze.ScadenzeViewModel
 import eu.stgm.sol.ui.scadenze.leggiOra
@@ -94,48 +95,52 @@ class ViewModelTest {
     }
 
     @Test
-    fun `posta - i numeri dei filtri e dei gruppi vengono da conteggi`() {
+    fun `posta - i numeri dei gruppi e del riquadro Da fare vengono da conteggi`() {
         serverBase()
         server.rispondi(
             "GET /api/conteggi",
             """{"da_rispondere": 5, "urgenti": 2, "da_controllare": 3, "da_leggere": 12, "bozze_pronte": 4,
-               "gruppi": {"1": {"da_leggere": 9, "totale": 120}}}""",
+               "scadenze_prossime": 2, "gruppi": {"1": {"da_leggere": 9, "totale": 120}}}""",
         )
         val vm = PostaViewModel(client, cache)
         vm.carica()
         aspetta { vm.stato.value.conteggi != null }
         val s = vm.stato.value
-        assertEquals(5, s.numero(FiltroRapido.DA_RISPONDERE))
-        assertEquals(2, s.numero(FiltroRapido.URGENTI))
-        assertEquals(3, s.numero(FiltroRapido.DA_CONTROLLARE))
+        assertEquals(
+            "urgenti non è una piastrella; a zero (truffe) non si vede",
+            listOf(VoceDaFare.DA_RISPONDERE to 5, VoceDaFare.DA_CONTROLLARE to 3, VoceDaFare.SCADENZE to 2),
+            s.piastrelle.map { it.voce to it.numero },
+        )
         assertEquals(9, s.daLeggere(s.gruppi.first { it.id == 1L }))
         assertEquals("senza conteggio vale l'elenco dei gruppi", 1, s.daLeggere(s.gruppi.first { it.id == 6L }))
     }
 
     @Test
-    fun `posta - il filtro Possibili truffe si vede solo se ce n'e almeno una`() {
+    fun `posta - la piastrella Possibili truffe c'e solo se ce n'e almeno una`() {
         serverBase()
         server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 0}""")
         val vm = PostaViewModel(client, cache)
         vm.carica()
         aspetta { vm.stato.value.conteggi != null }
-        assertFalse("a zero il filtro non c'è", vm.stato.value.filtroTruffeVisibile)
+        assertTrue("a zero la piastrella non c'è", vm.stato.value.piastrelle.none { it.voce == VoceDaFare.TRUFFE })
 
         server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 2}""")
         server.rispondi("GET /api/mail?sospetta=true&limite=50", """{"mail": [${Esempi.MAIL_SOSPETTA}], "altre": false}""")
         vm.carica()
         aspetta { vm.stato.value.conteggi?.sospette == 2 }
-        assertTrue(vm.stato.value.filtroTruffeVisibile)
-        assertEquals(2, vm.stato.value.numero(FiltroRapido.SOSPETTE))
+        val truffe = vm.stato.value.piastrelle.single { it.voce == VoceDaFare.TRUFFE }
+        assertEquals(2, truffe.numero)
+        assertEquals("possibili truffe", truffe.etichetta)
 
-        vm.scegliFiltro(FiltroRapido.SOSPETTE)
+        vm.scegliFiltro(VoceDaFare.TRUFFE.filtro!!)
         aspetta { vm.stato.value.mail.map { it.id } == listOf(820L) }
         assertTrue(vm.stato.value.mail.single().sospetta)
-        // Chiarite tutte mentre il filtro è scelto: resta visibile per poterlo togliere.
-        server.rispondi("GET /api/conteggi", """{"sospette": 0}""")
+        // Chiarite tutte mentre il filtro è scelto: niente piastrella, il filtro resta (c'è "togli filtro").
+        server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 0}""")
         vm.carica()
         aspetta { vm.stato.value.conteggi?.sospette == 0 && !vm.stato.value.caricamento }
-        assertTrue(vm.stato.value.filtroTruffeVisibile)
+        assertTrue(vm.stato.value.piastrelle.none { it.voce == VoceDaFare.TRUFFE })
+        assertEquals(FiltroRapido.SOSPETTE, vm.stato.value.filtro)
     }
 
     @Test
@@ -543,6 +548,27 @@ class ViewModelTest {
         assertFalse(pieno.stato.value.puoAggiungereGruppo)
         pieno.aggiungiGruppo("Diciassettesimo", "")
         assertEquals(ImpostazioniViewModel.TROPPI_GRUPPI, pieno.stato.value.erroreAzione)
+    }
+
+    @Test
+    fun `impostazioni - colore del gruppo, solo il campo colore (contratto 17)`() {
+        val vm = impostazioni()
+        server.rispondi("PATCH /api/gruppi/2", """{"id": 2, "nome": "Fornitori", "colore": "petrolio"}""")
+        vm.cambiaColoreGruppo(2, "petrolio")
+        aspetta { vm.stato.value.gruppi.first { it.id == 2L }.colore == "petrolio" && !vm.stato.value.inCorso }
+        assertEquals("""{"colore":"petrolio"}""", server.richiesteA("PATCH /api/gruppi/2").single().body.readUtf8())
+        assertEquals("Colore cambiato.", vm.stato.value.messaggio)
+
+        // Un nome fuori elenco: il server risponde 422 col campo "colore" e la frase si mostra.
+        server.rispondi(
+            "PATCH /api/gruppi/2",
+            """{"errore": "Questo colore non c'è. Scegli tra blu, verde, ambra, viola, grigio, ardesia, petrolio, rosa, indaco, oliva, marrone e ciano.", "codice": "dati_non_validi", "campo": "colore"}""",
+            422,
+        )
+        vm.cambiaColoreGruppo(2, "fucsia")
+        aspetta { vm.stato.value.erroreAzione != null }
+        assertTrue(vm.stato.value.erroreAzione!!.startsWith("Questo colore non c'è"))
+        assertEquals("petrolio", vm.stato.value.gruppi.first { it.id == 2L }.colore)
     }
 
     @Test

@@ -342,6 +342,17 @@ class ImpostazioniViewModel(
         }
     }
 
+    /** 17: [colore] è uno dei 12 nomi della guida (blu, verde, ...). */
+    fun cambiaColoreGruppo(id: Long, colore: String) = lavora {
+        when (val e = client.cambiaColoreGruppo(id, colore)) {
+            is Esito.Ok -> {
+                _stato.update { s -> s.copy(gruppi = s.gruppi.map { if (it.id == id) it.copy(colore = colore) else it }) }
+                "Colore cambiato."
+            }
+            else -> fallita(e)
+        }
+    }
+
     fun togliGruppo(id: Long) = lavora {
         when (val e = client.togliGruppo(id)) {
             is Esito.Ok -> {

@@ -9,15 +9,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,10 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.sol.ui.PulsantePieno
 import eu.stgm.sol.rete.Testi
+import eu.stgm.sol.ui.FasciaCalda
 import eu.stgm.sol.ui.Riquadro
 
 /** Il primo passo: collegare il telefono al server di casa con il codice di 8 cifre. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AbbinamentoScreen(
     vm: AbbinamentoViewModel,
@@ -44,14 +38,7 @@ fun AbbinamentoScreen(
     LaunchedEffect(stato.fatto) { if (stato.fatto) onFatto() }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Collega Sol") },
-            navigationIcon = {
-                if (onAnnulla != null) {
-                    IconButton(onClick = onAnnulla) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro") }
-                }
-            },
-        )
+        FasciaCalda("Collega Sol", indietro = onAnnulla)
         Column(
             Modifier
                 .fillMaxSize()

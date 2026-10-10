@@ -13,6 +13,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -79,6 +84,7 @@ import eu.stgm.sol.ui.riassunti.RiassuntiScreen
 import eu.stgm.sol.ui.riassunti.RiassuntiViewModel
 import eu.stgm.sol.ui.scadenze.ScadenzeScreen
 import eu.stgm.sol.ui.scadenze.ScadenzeViewModel
+import eu.stgm.sol.ui.tema.LocalSegni
 import eu.stgm.sol.ui.tema.SolTema
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -181,7 +187,7 @@ private fun Radice(richiesta: Pagina?, onRichiestaConsumata: () -> Unit, onNuovo
             StatoAvvio.Lettura -> Unit
             is StatoAvvio.Pronto ->
                 if (a.configurazione == null) {
-                    Scaffold(snackbarHost = { SnackbarHost(messaggi) }) { padding ->
+                    Scaffold(snackbarHost = { SnackbarHost(messaggi) }, contentWindowInsets = InsetsSottoLaFascia) { padding ->
                         Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
                             val vm: AbbinamentoViewModel = viewModel {
                                 AbbinamentoViewModel(app.archivio, prima = { app.svuotaDatiLocali() })
@@ -204,14 +210,30 @@ private val IconeSchede: Map<Scheda, ImageVector> = mapOf(
     Scheda.SCADENZE to Icons.Filled.DateRange,
 )
 
-/** La barra in basso con le quattro schede di tutti i giorni. */
+/**
+ * In alto niente margine: la fascia calda (o l'intestazione della mail) passa sotto
+ * la barra di stato e ci pensa da sé.
+ */
+private val InsetsSottoLaFascia: WindowInsets
+    @Composable get() = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+
+/** La barra in basso con le quattro schede di tutti i giorni; la scelta nel colore dell'accento. */
 @Composable
 fun BarraSchede(scelta: Scheda, onScegli: (Scheda) -> Unit) {
-    NavigationBar {
+    val segni = LocalSegni.current
+    val colori = NavigationBarItemDefaults.colors(
+        selectedIconColor = segni.attivo,
+        selectedTextColor = segni.attivo,
+        indicatorColor = segni.accentoTenue,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Scheda.entries.forEach { scheda ->
             NavigationBarItem(
                 selected = scelta == scheda,
                 onClick = { onScegli(scheda) },
+                colors = colori,
                 icon = { Icon(IconeSchede.getValue(scheda), contentDescription = null) },
                 label = {
                     // 14 sp: "In sospeso" ci sta intero anche su un telefono da 360 dp.
@@ -288,6 +310,7 @@ private fun App(
         Scaffold(
             bottomBar = { if (nav.inCima == null) BarraSchede(nav.scheda) { vai(nav.scegli(it)) } },
             snackbarHost = { SnackbarHost(messaggi) },
+            contentWindowInsets = InsetsSottoLaFascia,
         ) { padding ->
             Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
                 when (val pagina = nav.inCima) {
@@ -311,7 +334,12 @@ private fun App(
                     }
                     null -> statoSchede.SaveableStateProvider(nav.scheda.name) {
                         when (nav.scheda) {
-                            Scheda.POSTA -> PostaScreen(postaVm, onApriMail = apriMail, collegamentoNonProtetto = nonProtetto)
+                            Scheda.POSTA -> PostaScreen(
+                                postaVm,
+                                onApriMail = apriMail,
+                                collegamentoNonProtetto = nonProtetto,
+                                onApriScadenze = { vai(nav.scegli(Scheda.SCADENZE)) },
+                            )
                             Scheda.RIASSUNTI -> RiassuntiScreen(riassuntiVm, onApriMail = apriMail)
                             Scheda.INDIETRO -> IndietroScreen(
                                 indietroVm,

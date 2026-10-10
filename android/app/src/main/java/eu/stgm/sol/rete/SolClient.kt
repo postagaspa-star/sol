@@ -206,6 +206,10 @@ class SolClient(
     suspend fun cambiaDescrizioneGruppo(id: Long, descrizione: String): Esito<Unit> =
         chiamaSenzaDato("PATCH", "/api/gruppi/$id", buildJsonObject { put("descrizione", descrizione) }.toString())
 
+    /** 17: uno dei 12 nomi di colore; un nome sbagliato torna 422 col campo "colore". */
+    suspend fun cambiaColoreGruppo(id: Long, colore: String): Esito<Unit> =
+        chiamaSenzaDato("PATCH", "/api/gruppi/$id", buildJsonObject { put("colore", colore) }.toString())
+
     suspend fun togliGruppo(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/gruppi/$id", null)
 
     suspend fun regole(): Esito<List<Regola>> = chiama("GET", "/api/regole", null, ListSerializer(Regola.serializer()))

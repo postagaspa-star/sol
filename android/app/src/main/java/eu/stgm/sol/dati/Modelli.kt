@@ -106,6 +106,8 @@ data class Gruppo(
     val daLeggere: Int = 0,
     val totale: Int = 0,
     val descrizione: String? = null,
+    /** 17: il NOME del colore (blu, verde, ...); l'app lo traduce coi colori della guida. */
+    val colore: String? = null,
 ) {
     companion object {
         /** Il decisore sceglie tra 2 e 16 opzioni (15.1). */
@@ -439,6 +441,8 @@ data class Conteggi(
     val bozzePronte: Int = 0,
     /** 16.2: le mail segnalate come possibile truffa e non ancora chiarite. */
     val sospette: Int = 0,
+    /** 17: scadenze aperte da oggi a 7 giorni compresi, senza quelle delle possibili truffe. */
+    val scadenzeProssime: Int = 0,
     /** Chiave: id del gruppo, come testo (JSON non ha chiavi numeriche). */
     val gruppi: Map<String, ConteggioGruppo> = emptyMap(),
 )

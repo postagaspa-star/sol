@@ -1,6 +1,6 @@
 {
-  "server": "1.0.0",
-  "android": {"codice": 1, "nome": "1.0.0"},
-  "pc": {"codice": 1, "nome": "1.0.0"},
-  "nota": "Prima versione di Sol."
+  "server": "1.1.0",
+  "android": {"codice": 2, "nome": "1.1.0"},
+  "pc": {"codice": 2, "nome": "1.1.0"},
+  "nota": "Nuovo aspetto: gruppi colorati, riquadro Da fare, mail aperta con la risposta in evidenza e barra Invia, gesti veloci; segnale di possibile truffa."
 }

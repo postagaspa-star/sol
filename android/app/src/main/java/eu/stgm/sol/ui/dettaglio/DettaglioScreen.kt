@@ -1,34 +1,31 @@
 package eu.stgm.sol.ui.dettaglio
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -38,37 +35,55 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.sol.LocalMessaggi
-import eu.stgm.sol.dati.Gruppo
+import eu.stgm.sol.dati.Bozza
+import eu.stgm.sol.dati.Indirizzo
 import eu.stgm.sol.dati.Mail
 import eu.stgm.sol.ui.AvvisoLettura
 import eu.stgm.sol.ui.BarraCaricamento
+import eu.stgm.sol.ui.CerchioIniziali
 import eu.stgm.sol.ui.DialogoConferma
 import eu.stgm.sol.ui.DialogoErrore
-import eu.stgm.sol.ui.FilaPulsanti
-import eu.stgm.sol.ui.PulsantePieno
+import eu.stgm.sol.ui.EtichettaGruppo
+import eu.stgm.sol.ui.FoglioSpostaIn
+import eu.stgm.sol.ui.IconeBarraDiStato
 import eu.stgm.sol.ui.PulsanteTesto
 import eu.stgm.sol.ui.PulsanteVuoto
 import eu.stgm.sol.ui.Riquadro
 import eu.stgm.sol.ui.RiquadroTruffa
 import eu.stgm.sol.ui.Rotella
-import eu.stgm.sol.ui.Segno
-import eu.stgm.sol.ui.TipoSegno
-import eu.stgm.sol.ui.TitoloSezione
+import eu.stgm.sol.ui.Segnale
+import eu.stgm.sol.ui.Superficie
+import eu.stgm.sol.ui.SegnaleMail
 import eu.stgm.sol.ui.dimensione
+import eu.stgm.sol.ui.iniziali
 import eu.stgm.sol.ui.quandoCompleto
-import kotlin.math.roundToInt
+import eu.stgm.sol.ui.tema.ColoreGruppo
+import eu.stgm.sol.ui.tema.LocalSegni
+import eu.stgm.sol.ui.tema.LocalTemaScuro
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Una mail aperta (docs/aspetto.md §3): intestazione col cerchio colorato, l'ora e
+ * il gruppo (si tocca per spostarla), oggetto, l'eventuale avviso truffa, "In
+ * breve", il testo, gli allegati e la risposta. In basso la barra fissa.
+ */
 @Composable
 fun DettaglioScreen(vm: DettaglioViewModel, mailId: Long, onIndietro: () -> Unit) {
     val stato by vm.stato.collectAsStateWithLifecycle()
+    val risposta by vm.bozza.stato.collectAsStateWithLifecycle()
     val messaggi = LocalMessaggi.current
     var mostraSposta by rememberSaveable { mutableStateOf(false) }
     var chiediNonETruffa by rememberSaveable { mutableStateOf(false) }
+    var mostraRifai by rememberSaveable { mutableStateOf(false) }
+    var chiediScarta by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(mailId) {
         vm.apri(mailId)
@@ -80,87 +95,120 @@ fun DettaglioScreen(vm: DettaglioViewModel, mailId: Long, onIndietro: () -> Unit
         messaggi.showSnackbar(m)
     }
 
+    val mail = stato.mail
+    val colore = ColoreGruppo.daNome(stato.gruppi.firstOrNull { it.id == mail?.gruppoId }?.colore)
+    // Senza rete la risposta non si legge: niente barra per una bozza che non si vede.
+    val barra = if (mail == null || stato.daCacheDel != null) Barra.Nessuna else barraPer(mail, risposta)
+
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Mail") },
-            navigationIcon = {
-                IconButton(onClick = onIndietro) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                }
-            },
-        )
+        Intestazione(
+            mail = mail,
+            colore = colore,
+            occupato = stato.inCorso,
+            onIndietro = onIndietro,
+            onSposta = { mostraSposta = true },
+        ) { chiudi ->
+            if (mail != null) {
+                MenuMail(
+                    mail = mail,
+                    risposta = risposta,
+                    chiudi = chiudi,
+                    onLetta = vm::cambiaLetta,
+                    onRispondere = vm::cambiaDaRispondere,
+                    onSegnalaTruffa = vm::segnalaTruffa,
+                    onPrepara = vm::preparaRisposta,
+                    onScarta = { chiediScarta = true },
+                )
+            }
+        }
         BarraCaricamento(stato.caricamento || stato.inCorso)
-        val mail = stato.mail
         Column(
             Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp),
         ) {
-            AvvisoLettura(stato.errore, stato.daCacheDel, onRiprova = vm::carica, modifier = Modifier.padding(bottom = 8.dp))
+            AvvisoLettura(stato.errore, stato.daCacheDel, onRiprova = vm::carica, modifier = Modifier.padding(vertical = 8.dp))
             if (mail == null) {
                 if (stato.caricamento) Rotella()
             } else {
+                // Solo per le mail da controllare; le altre non hanno nessun riquadro sul gruppo.
+                if (mail.daControllare && !mail.sospetta) {
+                    GruppoGiusto(
+                        occupato = stato.inCorso,
+                        onSi = vm::confermaGruppo,
+                        onCambia = { mostraSposta = true },
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                Text(
+                    mail.oggetto.ifBlank { "(senza oggetto)" },
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 12.dp).semantics { heading() },
+                )
+                if (mail.urgente) SegnaleMail(Segnale.URGENTE, Modifier.padding(top = 4.dp))
+                // L'avviso truffa in cima, subito sotto l'oggetto (docs/aspetto.md §3).
                 if (mail.sospetta) {
                     AvvisoTruffa(inCorso = stato.inCorso, onNonETruffa = { chiediNonETruffa = true })
                 }
-                Intestazione(mail)
-                Gruppo(
-                    mail = mail,
-                    modalitaProva = stato.modalitaProva,
-                    inCorso = stato.inCorso,
-                    onSposta = { mostraSposta = true },
-                    onVaBene = vm::confermaGruppo,
-                )
-                FilaPulsanti(Modifier.padding(top = 12.dp)) {
-                    PulsanteVuoto(
-                        if (mail.letta) "Segna da leggere" else "Segna come letta",
-                        vm::cambiaLetta,
-                        abilitato = !stato.inCorso,
-                    )
-                    if (!mail.rispostaData) {
-                        PulsanteVuoto(
-                            if (mail.daRispondere) "Non serve rispondere" else "Da rispondere",
-                            vm::cambiaDaRispondere,
-                            abilitato = !stato.inCorso,
-                        )
-                    }
-                    // 16.3: meno in vista delle altre azioni, ma sempre a portata.
-                    if (!mail.sospetta) {
-                        PulsanteTesto("Segnala come possibile truffa", vm::segnalaTruffa, abilitato = !stato.inCorso)
-                    }
+                Mittenti(mail)
+                mail.riassunto?.takeIf { it.isNotBlank() }?.let { InBreve(it, colore) }
+                SelectionContainer(Modifier.padding(top = 16.dp)) {
+                    Text(mail.corpo?.takeIf { it.isNotBlank() } ?: mail.anteprima, style = MaterialTheme.typography.bodyLarge)
                 }
-                TitoloSezione("Testo")
-                SelectionContainer {
+                if (mail.allegati.isNotEmpty()) Allegati(mail)
+                // Con una risposta aperta lo dice già il suo riquadro.
+                val rispostaAperta = risposta.bozza?.let { !it.chiusa } == true
+                if (mail.rispostaData && !rispostaAperta && risposta.bozza?.stato != Bozza.INVIATA) {
                     Text(
-                        mail.corpo?.takeIf { it.isNotBlank() } ?: mail.anteprima,
-                        style = MaterialTheme.typography.bodyLarge,
+                        "Hai già risposto.",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 16.dp),
                     )
                 }
-                if (mail.allegati.isNotEmpty()) {
-                    TitoloSezione("Allegati")
-                    mail.allegati.forEach {
-                        Text("${it.nome}  (${dimensione(it.byte)})", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Text(
-                        "Gli allegati si aprono dalla casella di posta.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-                HorizontalDivider(Modifier.padding(top = 16.dp))
+                Spacer(Modifier.height(16.dp))
                 if (stato.daCacheDel != null) {
-                    Riquadro("La bozza si vede solo quando il server di casa risponde.", modifier = Modifier.padding(top = 12.dp))
+                    Riquadro("La bozza si vede solo quando il server di casa risponde.")
                 } else {
-                    SezioneBozza(vm.bozza, onRifai = vm::rifaiBozza, giaRisposto = mail.rispostaData)
+                    RiquadroRisposta(vm.bozza, risposta, giaRisposto = mail.rispostaData)
                 }
-                Row(Modifier.heightIn(min = 32.dp)) {}
+                Spacer(Modifier.height(24.dp))
             }
         }
+        BarraRisposta(
+            barra,
+            onRifai = { mostraRifai = true },
+            onInvia = vm.bozza::inviaDallaBarra,
+            onPrepara = vm::preparaRisposta,
+        )
     }
 
+    FinestreRisposta(vm.bozza, risposta)
     DialogoErrore(stato.erroreAzione, vm::consumaErroreAzione)
+    if (mostraRifai) {
+        DialogoRifai(
+            onRifai = { istruzioni ->
+                mostraRifai = false
+                vm.bozza.rifaiDallaBarra(istruzioni, vm::rifaiBozza)
+            },
+            onAnnulla = { mostraRifai = false },
+        )
+    }
+    if (chiediScarta) {
+        DialogoConferma(
+            titolo = "Scartare la risposta?",
+            testo = "La risposta non verrà inviata. Potrai sempre chiederne una nuova.",
+            conferma = "Scarta",
+            onConferma = {
+                chiediScarta = false
+                vm.bozza.scarta()
+            },
+            onAnnulla = { chiediScarta = false },
+            pericolosa = true,
+        )
+    }
     if (chiediNonETruffa) {
         DialogoConferma(
             titolo = "Non è una truffa?",
@@ -174,89 +222,207 @@ fun DettaglioScreen(vm: DettaglioViewModel, mailId: Long, onIndietro: () -> Unit
             onAnnulla = { chiediNonETruffa = false },
         )
     }
-    val mail = stato.mail
     if (mostraSposta && mail != null) {
-        DialogoSposta(
+        FoglioSpostaIn(
             gruppi = stato.gruppi,
             attuale = mail.gruppoId,
-            onSposta = { gruppo, impara ->
+            onScegli = { gruppo, impara ->
                 mostraSposta = false
                 vm.sposta(gruppo, impara)
             },
-            onAnnulla = { mostraSposta = false },
+            onChiudi = { mostraSposta = false },
         )
     }
 }
 
-/** "Mario Rossi <rossi@esempio.it>"; con il nome vuoto (o uguale all'indirizzo) solo l'indirizzo. */
-internal fun daChi(nome: String?, indirizzo: String): String {
-    val n = nome?.trim().orEmpty()
-    return when {
-        n.isEmpty() || n.equals(indirizzo, ignoreCase = true) -> indirizzo
-        indirizzo.isBlank() -> n
-        else -> "$n <$indirizzo>"
+/**
+ * "Da: rossi@esempio.it": il nome c'è già nell'intestazione, qui conta l'indirizzo
+ * (è quello che tradisce una truffa). Solo se manca l'indirizzo, il nome.
+ */
+internal fun rigaDa(mittente: Indirizzo): String =
+    "Da: " + mittente.indirizzo.trim().ifEmpty { mittente.nome?.trim().orEmpty() }
+
+/**
+ * "← (MR) Mario Rossi ⋮" e sotto "oggi alle 08:12 · [Clienti ▾]": il gruppo si
+ * tocca per spostare la mail. [menu] riceve la funzione che chiude il menu.
+ */
+@Composable
+private fun Intestazione(
+    mail: Mail?,
+    colore: ColoreGruppo,
+    occupato: Boolean,
+    onIndietro: () -> Unit,
+    onSposta: () -> Unit,
+    menu: @Composable (chiudi: () -> Unit) -> Unit,
+) {
+    IconeBarraDiStato(scure = !LocalTemaScuro.current)
+    var menuAperto by rememberSaveable { mutableStateOf(false) }
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column {
+            Row(
+                Modifier.statusBarsPadding().fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onIndietro) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro") }
+                if (mail != null) {
+                    CerchioIniziali(iniziali(mail.mittente.nome, mail.mittente.indirizzo), colore.base)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(
+                            mail.mittente.etichetta,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // "oggi 08:12", come nella guida: più spazio per il nome del gruppo.
+                            val quando = quandoCompleto(mail.ricevutaIl).replace(" alle ", " ")
+                            if (quando.isNotBlank()) {
+                                Text(
+                                    "$quando · ",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            // Il tocco prende tutta l'altezza (48 dp), l'etichetta resta piccola.
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable(enabled = !occupato, role = Role.Button, onClickLabel = "Sposta in un altro gruppo", onClick = onSposta)
+                                    .heightIn(min = 48.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                EtichettaGruppo(mail.gruppo ?: "Nessun gruppo", colore, conFreccia = true)
+                            }
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { menuAperto = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Altre azioni") }
+                        DropdownMenu(expanded = menuAperto, onDismissRequest = { menuAperto = false }) {
+                            menu { menuAperto = false }
+                        }
+                    }
+                } else {
+                    Text("Mail", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+    }
+}
+
+/** Le azioni rare (docs/aspetto.md §3). Niente "Segna come letta" in vista: aprire la mail la segna già. */
+@Composable
+private fun MenuMail(
+    mail: Mail,
+    risposta: eu.stgm.sol.ui.StatoBozza,
+    chiudi: () -> Unit,
+    onLetta: () -> Unit,
+    onRispondere: () -> Unit,
+    onSegnalaTruffa: () -> Unit,
+    onPrepara: () -> Unit,
+    onScarta: () -> Unit,
+) {
+    @Composable
+    fun Voce(testo: String, azione: () -> Unit) {
+        DropdownMenuItem(
+            text = { Text(testo, style = MaterialTheme.typography.bodyLarge) },
+            onClick = {
+                chiudi()
+                azione()
+            },
+            modifier = Modifier.heightIn(min = 52.dp),
+        )
+    }
+    Voce(if (mail.letta) "Segna come da leggere" else "Segna come letta", onLetta)
+    if (!mail.rispostaData) Voce(if (mail.daRispondere) "Non serve rispondere" else "Va risposta", onRispondere)
+    // 16.3: meno in vista delle altre azioni, ma sempre a portata.
+    if (!mail.sospetta) Voce("Segnala come possibile truffa", onSegnalaTruffa)
+    val bozza = risposta.bozza
+    val aperta = bozza != null && !bozza.chiusa
+    if (bozza != null && aperta && !bozza.inPreparazione && !risposta.campiBloccati) Voce("Scarta la risposta", onScarta)
+    // Per una mail senza barra in basso (sospetta, o che non chiede risposta) la risposta si chiede da qui.
+    if (!aperta && barraPer(mail, risposta) == Barra.Nessuna && !risposta.caricamento && bozza?.stato != Bozza.INVIATA) {
+        Voce("Prepara una risposta", onPrepara)
+    }
+}
+
+/**
+ * "È nel gruppo giusto? [Sì] [Cambia]": solo per le mail che Sol non è sicuro di aver
+ * messo bene. Su una superficie neutra, col "?" ambra del segnale: non si confonde
+ * con "In breve", che ha il colore del gruppo.
+ */
+@Composable
+private fun GruppoGiusto(occupato: Boolean, onSi: () -> Unit, onCambia: () -> Unit, modifier: Modifier = Modifier) {
+    Superficie(modifier) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = LocalSegni.current.controllare)
+            Text(
+                "È nel gruppo giusto?",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f).padding(start = 10.dp),
+            )
+            PulsanteTesto("Sì", onSi, abilitato = !occupato)
+            PulsanteTesto("Cambia", onCambia, abilitato = !occupato)
+        }
+    }
+}
+
+/** Da chi, a chi; per le PEC anche chi ha spedito la busta (15.8). */
+@Composable
+private fun Mittenti(mail: Mail) {
+    val stile = MaterialTheme.typography.bodySmall
+    val colore = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.padding(top = 6.dp)) {
+        Text(rigaDa(mail.mittente), style = stile, color = colore)
+        mail.pec?.let { pec ->
+            Text(
+                "Arrivata come PEC da: ${pec.mittenteBusta}" + (pec.gestore?.let { " (gestore $it)" } ?: ""),
+                style = stile,
+                color = colore,
+            )
+        }
+        if (mail.destinatari.isNotEmpty()) {
+            Text("A: ${mail.destinatari.joinToString(", ") { it.etichetta }}", style = stile, color = colore)
+        }
+        if (mail.cc.isNotEmpty()) {
+            Text("Cc: ${mail.cc.joinToString(", ") { it.etichetta }}", style = stile, color = colore)
+        }
+        // La casella in cui è arrivata, se non si vede già tra i destinatari (per esempio un inoltro).
+        mail.casella?.takeIf { c -> (mail.destinatari + mail.cc).none { it.indirizzo.equals(c, ignoreCase = true) } }?.let {
+            Text("Arrivata nella casella $it", style = stile, color = colore)
+        }
+    }
+}
+
+/** "In breve", con la tinta leggera del colore del gruppo (al buio più smorzata, resta una tinta). */
+@Composable
+private fun InBreve(testo: String, colore: ColoreGruppo) {
+    Surface(
+        color = if (LocalTemaScuro.current) colore.scuroFondo.copy(alpha = 0.6f) else colore.chiaroFondo,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text("In breve", style = MaterialTheme.typography.labelMedium, color = colore.testo)
+            Text(testo, style = MaterialTheme.typography.bodyLarge)
+        }
     }
 }
 
 @Composable
-private fun Intestazione(mail: Mail) {
-    Text(mail.oggetto.ifBlank { "(senza oggetto)" }, style = MaterialTheme.typography.titleLarge)
-    Text(
-        "Da: ${daChi(mail.mittente.nome, mail.mittente.indirizzo)}",
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(top = 6.dp),
-    )
-    // 15.8: per le PEC il mittente sopra è quello della mail interna; la busta l'ha spedita il gestore.
-    mail.pec?.let { pec ->
+private fun Allegati(mail: Mail) {
+    Column(Modifier.padding(top = 16.dp)) {
+        Text("Allegati", style = MaterialTheme.typography.titleSmall)
+        mail.allegati.forEach {
+            Text("${it.nome}  (${dimensione(it.byte)})", style = MaterialTheme.typography.bodyMedium)
+        }
         Text(
-            "Arrivata come PEC da: ${pec.mittenteBusta}" + (pec.gestore?.let { " (gestore $it)" } ?: ""),
-            style = MaterialTheme.typography.bodyMedium,
+            "Gli allegati si aprono dalla casella di posta.",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
         )
-    }
-    if (mail.destinatari.isNotEmpty()) {
-        Text("A: ${mail.destinatari.joinToString(", ") { it.etichetta }}", style = MaterialTheme.typography.bodyMedium)
-    }
-    if (mail.cc.isNotEmpty()) {
-        Text("Cc: ${mail.cc.joinToString(", ") { it.etichetta }}", style = MaterialTheme.typography.bodyMedium)
-    }
-    Text(
-        listOfNotNull(quandoCompleto(mail.ricevutaIl).ifBlank { null }, mail.casella?.let { "in $it" }).joinToString(" "),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    val segni = buildList {
-        if (mail.sospetta) add(TipoSegno.TRUFFA)
-        if (mail.urgente) add(TipoSegno.URGENTE)
-        if (mail.daRispondere && !mail.rispostaData) add(TipoSegno.DA_RISPONDERE)
-        if (mail.bozzaPronta) add(TipoSegno.BOZZA_PRONTA)
-        if (mail.daControllare) add(TipoSegno.DA_CONTROLLARE)
-    }
-    if (segni.isNotEmpty()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-            segni.forEach { Segno(it) }
-        }
-    }
-    if (mail.rispostaData) {
-        Text(
-            "Hai già risposto.",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-    }
-    mail.riassunto?.takeIf { it.isNotBlank() }?.let {
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Text("In breve", style = MaterialTheme.typography.labelMedium)
-                Text(it, style = MaterialTheme.typography.bodyLarge)
-            }
-        }
     }
 }
 
@@ -266,119 +432,14 @@ const val AVVISO_TRUFFA =
         "mandare documenti, telefona al mittente a un numero che conosci già, non a quello scritto nella mail."
 
 /**
- * In cima al dettaglio di una mail sospetta: chiaro e ben visibile, ma con i colori
+ * Sopra "In breve" in una mail sospetta: chiaro e ben visibile, ma con i colori
  * degli avvisi dell'app, non da allarme. Il pulsante resta pieno e leggibile.
  */
 @Composable
 private fun AvvisoTruffa(inCorso: Boolean, onNonETruffa: () -> Unit) {
-    RiquadroTruffa(AVVISO_TRUFFA, Modifier.padding(bottom = 12.dp)) {
+    RiquadroTruffa(AVVISO_TRUFFA, Modifier.padding(top = 14.dp)) {
         Box(Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.CenterEnd) {
-            PulsanteVuoto("Non è una truffa", onNonETruffa, abilitato = !inCorso)
+            PulsanteVuoto("Non è una truffa", onNonETruffa, abilitato = !inCorso, colore = LocalSegni.current.truffaTesto)
         }
     }
-}
-
-/** Da dove viene il gruppo, detto semplice. */
-private fun origine(mail: Mail): String = when (mail.origineSmistamento) {
-    "regola" -> "Scelto da una regola."
-    "utente" -> "Scelto da te."
-    "decisore" -> mail.sicurezza?.let { "Scelto da Sol (sicuro al ${(it * 100).roundToInt()}%)." } ?: "Scelto da Sol."
-    else -> if (mail.smistamento == "in_attesa") "Sol non l'ha ancora smistata." else ""
-}
-
-@Composable
-private fun Gruppo(mail: Mail, modalitaProva: Boolean, inCorso: Boolean, onSposta: () -> Unit, onVaBene: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Text("Gruppo: ${mail.gruppo ?: "nessuno"}", style = MaterialTheme.typography.titleSmall)
-            origine(mail).takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (mail.sospetta) {
-                Text(
-                    "È tra quelle da controllare perché potrebbe essere una truffa.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            } else if (mail.daControllare) {
-                Text(
-                    "Sol non è sicuro: controlla se il gruppo va bene.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            if (!mail.applicataInCasella && modalitaProva) {
-                Text(
-                    "Modalità prova: nella casella vera la mail non è stata spostata.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            FilaPulsanti(Modifier.padding(top = 8.dp)) {
-                // Su una possibile truffa il gesto giusto è "Non è una truffa", in cima.
-                if (mail.daControllare && !mail.sospetta) PulsantePieno("Va bene così", onVaBene, abilitato = !inCorso)
-                PulsanteVuoto("Sposta in...", onSposta, abilitato = !inCorso)
-            }
-        }
-    }
-}
-
-@Composable
-private fun DialogoSposta(
-    gruppi: List<Gruppo>,
-    attuale: Long?,
-    onSposta: (Long, Boolean) -> Unit,
-    onAnnulla: () -> Unit,
-) {
-    var scelto by rememberSaveable { mutableStateOf(attuale) }
-    // Acceso di base: correggere una volta deve bastare per le prossime mail.
-    var impara by rememberSaveable { mutableStateOf(true) }
-    AlertDialog(
-        onDismissRequest = onAnnulla,
-        title = { Text("Sposta in...") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                gruppi.forEach { g ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)
-                            .selectable(selected = scelto == g.id, role = Role.RadioButton, onClick = { scelto = g.id }),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = scelto == g.id, onClick = null)
-                        Text(g.nome, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
-                    }
-                }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 52.dp)
-                        .toggleable(value = impara, role = Role.Checkbox, onValueChange = { impara = it }),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(checked = impara, onCheckedChange = null)
-                    Text(
-                        "Ricordati questo mittente",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(start = 12.dp),
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            PulsantePieno(
-                "Sposta",
-                onClick = { scelto?.let { onSposta(it, impara) } },
-                abilitato = scelto != null && scelto != attuale,
-            )
-        },
-        dismissButton = { PulsanteTesto("Annulla", onAnnulla) },
-    )
 }

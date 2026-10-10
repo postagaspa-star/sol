@@ -1,6 +1,8 @@
 package eu.stgm.sol.ui
 
 import eu.stgm.sol.dati.CacheFile
+import eu.stgm.sol.dati.Indirizzo
+import eu.stgm.sol.ui.dettaglio.rigaDa
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -66,11 +68,16 @@ class LogicaTest {
     }
 
     @Test
-    fun `Da - con il nome vuoto solo l'indirizzo`() {
-        assertEquals("rossi@esempio.it", eu.stgm.sol.ui.dettaglio.daChi("", "rossi@esempio.it"))
-        assertEquals("rossi@esempio.it", eu.stgm.sol.ui.dettaglio.daChi(null, "rossi@esempio.it"))
-        assertEquals("rossi@esempio.it", eu.stgm.sol.ui.dettaglio.daChi("rossi@esempio.it", "rossi@esempio.it"))
-        assertEquals("Mario Rossi <rossi@esempio.it>", eu.stgm.sol.ui.dettaglio.daChi("Mario Rossi", "rossi@esempio.it"))
+    fun `Da - solo l'indirizzo, il nome sta gia nell'intestazione`() {
+        assertEquals("Da: rossi@esempio.it", rigaDa(Indirizzo("Mario Rossi", "rossi@esempio.it")))
+        assertEquals("Da: rossi@esempio.it", rigaDa(Indirizzo("", "rossi@esempio.it")))
+        assertEquals("Da: rossi@esempio.it", rigaDa(Indirizzo(null, "rossi@esempio.it")))
+        assertEquals(
+            "l'indirizzo che tradisce la truffa resta in vista",
+            "Da: bianchi.amministrazione@esempio-pagamenti.it",
+            rigaDa(Indirizzo("Luca Bianchi", "bianchi.amministrazione@esempio-pagamenti.it")),
+        )
+        assertEquals("senza indirizzo, il nome", "Da: Mario Rossi", rigaDa(Indirizzo("Mario Rossi", "")))
     }
 
     @Test
