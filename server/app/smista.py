@@ -325,6 +325,9 @@ def decisione_utente_truffa(conn: sqlite3.Connection, mail_id: int, sospetta: bo
     """POST /api/mail/{id}/sospetta: la decisione dell'utente vince sul decisore, anche dopo."""
     with db.transazione(conn):
         m = conn.execute("SELECT * FROM mail WHERE id = ?", (mail_id,)).fetchone()
+        if m["sospetta"] and m["sospetta_utente"] is None:
+            # Pagina Oggi (18.1): l'utente ha chiarito una possibile truffa segnalata da Sol.
+            conn.execute("UPDATE mail SET truffa_chiarita_il = ? WHERE id = ?", (clock.adesso(), mail_id))
         incerti = [c for c in json.loads(m["incerti"] or "[]") if c != "truffa"]
         conn.execute(
             "UPDATE mail SET sospetta = ?, sospetta_utente = ?, incerti = ? WHERE id = ?",

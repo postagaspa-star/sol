@@ -24,7 +24,7 @@ def test_da_v1_a_v1_1(tmp_path, monkeypatch):
     db.init_db(percorso)
     db.init_db(percorso)  # una seconda volta non fa niente
     with db.aperta(percorso) as conn:
-        assert [r[0] for r in conn.execute("SELECT versione FROM versione_schema ORDER BY versione")] == [1, 2, 3, 4]
+        assert [r[0] for r in conn.execute("SELECT versione FROM versione_schema ORDER BY versione")] == [1, 2, 3, 4, 5]
         m = conn.execute("SELECT oggetto, applica, incerti, automatica, sospetta, sospetta_utente FROM mail"
                          " WHERE id_esterno = 'a'").fetchone()
         assert tuple(m) == ("Vecchia", 0, "[]", 0, 0, None)  # l'arretrato non si sposta da solo

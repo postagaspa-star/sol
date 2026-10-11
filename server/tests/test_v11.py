@@ -18,7 +18,9 @@ def test_15_4_conteggi(client, auth, finta, servizi):
     gruppi = {g["id"]: g for g in client.get("/api/gruppi", headers=auth).json()}
     assert set(c["gruppi"]) == {str(i) for i in gruppi}
     for gid, valori in c["gruppi"].items():
-        assert valori == {"da_leggere": gruppi[int(gid)]["da_leggere"], "totale": gruppi[int(gid)]["totale"]}
+        assert {k: valori[k] for k in ("da_leggere", "totale")} == {
+            "da_leggere": gruppi[int(gid)]["da_leggere"], "totale": gruppi[int(gid)]["totale"]}
+        assert set(valori) == {"da_leggere", "totale", "ultima"}  # "ultima": contratto 18.2
     # Letta una urgente, resta urgente solo se è ancora da rispondere.
     urgente = mail_per_oggetto(client, auth, "quadro elettrico")
     client.post(f"/api/mail/{urgente['id']}/letta", json={"letta": True}, headers=auth)

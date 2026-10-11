@@ -56,6 +56,7 @@ FRASI_CAMPI = {
     "versione": "Manca la versione della risposta che hai controllato.",
     "codice": "Il codice di abbinamento non va bene.",
     "nome": "Il nome non può essere vuoto né troppo lungo.",
+    "raccolta": "Va indicato se il gruppo è una raccolta (sì o no).",
     "tipo": "Il tipo indicato non è tra quelli previsti.",
     "indirizzo": "L'indirizzo non va bene.",
     "password_app": "La password per le app non va bene.",

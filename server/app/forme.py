@@ -34,6 +34,7 @@ def gruppo(r: sqlite3.Row) -> dict:
         "cartella": cartella_di(r["nome"]),
         "descrizione": r["descrizione"],
         "colore": r["colore"],
+        "raccolta": bool(r["raccolta"]),
         "da_leggere": r["da_leggere"] if "da_leggere" in r.keys() else 0,
         "totale": r["totale"] if "totale" in r.keys() else 0,
     }

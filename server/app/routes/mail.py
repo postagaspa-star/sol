@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 
-from .. import db, forme, smista
+from .. import clock, db, forme, smista
 from ..auth import richiede_token
 from ..caselle import ErroreCasella
 from ..db import get_conn
@@ -112,6 +112,9 @@ def sposta(mail_id: int, corpo: SpostaIn, conn: sqlite3.Connection = Depends(get
             except ErroreCasella as e:
                 raise ErroreApi(502, e.messaggio) from e
         with db.transazione(conn):
+            # Per la pagina Oggi (18.1). Le possibili truffe contano quando vengono chiarite.
+            if m["smistamento"] == "da_controllare" and not m["sospetta"]:
+                conn.execute("UPDATE mail SET sistemata_il = ? WHERE id = ?", (clock.adesso(), mail_id))
             if prova:
                 conn.execute(
                     "UPDATE mail SET gruppo_id = ?, smistamento = 'corretta', origine_smistamento = 'utente',"
@@ -146,6 +149,8 @@ def conferma(mail_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Serv
         conn.execute(
             "UPDATE mail SET smistamento = 'smistata', applica = ? WHERE id = ?", (0 if prova else 1, mail_id)
         )
+        if not m["sospetta"]:  # pagina Oggi (18.1); una possibile truffa conta quando è chiarita
+            conn.execute("UPDATE mail SET sistemata_il = ? WHERE id = ?", (clock.adesso(), mail_id))
         if not prova:
             s.fabbrica.in_sottofondo(s.lavoro.applica_in_caselle)
     return forme.mail_lista(conn, [_mail(conn, mail_id)])[0]

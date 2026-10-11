@@ -36,6 +36,8 @@ IMPOSTAZIONI_INIZIALI = {
     "conserva_giorni": 180,
     # v1.2 (contratto 16.2): da questa probabilità di "si" la mail è una possibile truffa.
     "soglia_truffa": 0.5,
+    # v1.4 (contratto 18.3): come salutare l'utente nella pagina Oggi ("" = solo "Buongiorno").
+    "nome": "",
 }
 
 SCHEMA_1 = """
@@ -328,6 +330,20 @@ def _semina_4(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE gruppi SET colore = ? WHERE id = ?", (colore_libero(conn), riga["id"]))
 
 
+# v1.4 (contratto 18): gruppi "raccolta" e i momenti in cui l'utente chiude qualcosa, per
+# contare nella pagina Oggi quello che ha già fatto (fatte_oggi).
+SCHEMA_5 = """
+ALTER TABLE gruppi ADD COLUMN raccolta INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail ADD COLUMN sistemata_il TEXT;
+ALTER TABLE mail ADD COLUMN truffa_chiarita_il TEXT;
+ALTER TABLE scadenze ADD COLUMN fatta_il TEXT
+"""
+
+
+def _semina_5(conn: sqlite3.Connection) -> None:
+    conn.execute("UPDATE gruppi SET raccolta = 1 WHERE chiave IN ('newsletter', 'amministrazione')")
+
+
 # Migrazioni: (versione, sql, funzione di semina o None). Si aggiunge in fondo,
 # mai si modifica una già rilasciata: un database vecchio le fa tutte in ordine.
 MIGRAZIONI = [
@@ -335,6 +351,7 @@ MIGRAZIONI = [
     (2, SCHEMA_2, _semina_2),
     (3, SCHEMA_3, _semina_3),
     (4, SCHEMA_4, _semina_4),
+    (5, SCHEMA_5, _semina_5),
 ]
 
 

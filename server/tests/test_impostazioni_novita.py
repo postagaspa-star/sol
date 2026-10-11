@@ -6,6 +6,7 @@ def test_impostazioni_iniziali(client, auth):
         "modalita_prova": True, "soglia_sicurezza": 0.85, "giorni_risposta": 2, "giorni_sollecito": 7,
         "intervallo_controllo_minuti": 5, "firma": "Cordiali saluti\nManuel", "tono": "cortese e diretto",
         "scrittori": ["groq", "cerebras", "locale"], "conserva_giorni": 180, "soglia_truffa": 0.5,
+        "nome": "",
     }
 
 

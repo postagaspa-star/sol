@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSIONE = "1.1.0"
+VERSIONE = "2.0.0"
 
 VERSIONI_PATH_DEFAULT = str(Path(__file__).resolve().parent / "versioni.json")
 APK_DIR_DEFAULT = str(Path(__file__).resolve().parents[1] / "apk")

@@ -58,6 +58,11 @@ def modifica(scadenza_id: int, corpo: ScadenzaPatch, conn: sqlite3.Connection = 
     campi = {}
     if corpo.stato is not None:
         campi["stato"] = corpo.stato
+        # Per la pagina Oggi (18.1): quando è stata segnata fatta.
+        if corpo.stato == "fatta" and _scadenza(conn, scadenza_id)["stato"] != "fatta":
+            campi["fatta_il"] = clock.adesso()
+        elif corpo.stato != "fatta":
+            campi["fatta_il"] = None
     if corpo.quando is not None:
         campi["quando"] = corpo.quando
     if corpo.descrizione is not None:

@@ -1,7 +1,7 @@
 # Sol — server (FastAPI + SQLite)
 
 Il server che lavora in sottofondo sulla posta: legge le caselle, smista, riassume,
-prepara le bozze, trova le scadenze. Fonte di verità delle API: [../docs/contratto-api.md](../docs/contratto-api.md) (v1.1).
+prepara le bozze, trova le scadenze. Fonte di verità delle API: [../docs/contratto-api.md](../docs/contratto-api.md) (v1.4).
 
 ## Avvio in locale
 

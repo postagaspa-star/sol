@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from .. import clock, db, forme
 from ..auth import richiede_token
+from ..caselle.testo import riga
 from ..db import get_conn
 from ..errori import conflitto, non_valido
 from ..schemi import ConfermaIn, ImpostazioniPatch
@@ -42,6 +43,11 @@ def cambia(corpo: ImpostazioniPatch, conn: sqlite3.Connection = Depends(get_conn
         cambi["scrittori"] = list(dict.fromkeys(cambi["scrittori"]))
     if "firma" in cambi:
         cambi["firma"] = cambi["firma"].strip()
+    if "nome" in cambi:
+        # 18.3: può essere vuoto (allora le app salutano solo con "Buongiorno").
+        cambi["nome"] = riga(cambi["nome"], 1000)
+        if len(cambi["nome"]) > 40:
+            raise non_valido("Il nome può avere al massimo 40 caratteri.", campo="nome")
     if "tono" in cambi:
         cambi["tono"] = cambi["tono"].strip()
         if not cambi["tono"]:
@@ -74,6 +80,19 @@ def applica_arretrato(corpo: ConfermaIn | None = None, conn: sqlite3.Connection 
     return {"da_applicare": cur.rowcount}
 
 
+def _ultima(conn: sqlite3.Connection, gruppo_id: int) -> dict | None:
+    """18.2: l'ultima mail del gruppo, per la riga chiusa di una raccolta."""
+    m = conn.execute(
+        "SELECT mittente_nome, mittente_indirizzo, oggetto, ricevuta_il FROM mail WHERE gruppo_id = ?"
+        " ORDER BY ricevuta_il DESC, id DESC LIMIT 1",
+        (gruppo_id,),
+    ).fetchone()
+    if m is None:
+        return None
+    return {"mittente": m["mittente_nome"] or m["mittente_indirizzo"], "oggetto": m["oggetto"],
+            "ricevuta_il": clock.per_utente(m["ricevuta_il"])}
+
+
 @router.get("/conteggi")
 def conteggi(conn: sqlite3.Connection = Depends(get_conn)):
     """Contratto 15.4 (le mail tolte dalla pulizia non ci sono più nel database)."""
@@ -82,7 +101,7 @@ def conteggi(conn: sqlite3.Connection = Depends(get_conn)):
         return conn.execute(sql).fetchone()[0]
 
     gruppi = {
-        str(r["id"]): {"da_leggere": r["da_leggere"], "totale": r["totale"]}
+        str(r["id"]): {"da_leggere": r["da_leggere"], "totale": r["totale"], "ultima": _ultima(conn, r["id"])}
         for r in conn.execute(
             "SELECT g.id, (SELECT COUNT(*) FROM mail m WHERE m.gruppo_id = g.id AND m.letta = 0) AS da_leggere,"
             " (SELECT COUNT(*) FROM mail m WHERE m.gruppo_id = g.id) AS totale FROM gruppi g ORDER BY g.ordine, g.id"

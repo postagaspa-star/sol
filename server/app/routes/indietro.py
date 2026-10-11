@@ -41,9 +41,23 @@ def indietro(conn: sqlite3.Connection = Depends(get_conn)):
         for r, mail in zip(righe, forme.mail_lista(conn, righe))
     ]
 
+    aspetti_tu = [
+        {
+            "inviata": forme.inviata(i),
+            "giorni": giorni,
+            "bozza_sollecito": {"id": bozza["id"], "stato": bozza["stato"]} if bozza else None,
+        }
+        for i, giorni, bozza in elenco_aspetti_tu(conn, imp)
+    ]
+    return {"aspettano_te": aspettano_te, "aspetti_tu": aspetti_tu}
+
+
+def elenco_aspetti_tu(conn: sqlite3.Connection, imp: dict) -> list[tuple[sqlite3.Row, int, sqlite3.Row | None]]:
+    """Le mail inviate che aspettano una risposta da troppo: (inviata, giorni, sollecito aperto o None)."""
+    ora = clock.now()
     giorni_sollecito = imp["giorni_sollecito"]
     limite_tu = clock.iso(ora - timedelta(days=giorni_sollecito))
-    aspetti_tu = []
+    uscita = []
     for i in conn.execute(
         "SELECT * FROM inviate WHERE aspetta_risposta = 1 AND ignorata = 0 AND inviata_il < ? ORDER BY inviata_il",
         (limite_tu,),
@@ -61,14 +75,8 @@ def indietro(conn: sqlite3.Connection = Depends(get_conn)):
             if clock.da_iso(bozza["inviata_il"]) > ora - timedelta(days=giorni_sollecito):
                 continue  # sollecitata da poco: si aspetta di nuovo
             bozza = None
-        aspetti_tu.append(
-            {
-                "inviata": forme.inviata(i),
-                "giorni": clock.giorni_trascorsi(i["inviata_il"]),
-                "bozza_sollecito": {"id": bozza["id"], "stato": bozza["stato"]} if bozza else None,
-            }
-        )
-    return {"aspettano_te": aspettano_te, "aspetti_tu": aspetti_tu}
+        uscita.append((i, clock.giorni_trascorsi(i["inviata_il"]), bozza))
+    return uscita
 
 
 def _inviata(conn: sqlite3.Connection, inviata_id: int) -> sqlite3.Row:

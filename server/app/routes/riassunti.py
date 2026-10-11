@@ -19,6 +19,10 @@ router = APIRouter(dependencies=[Depends(richiede_token)])
 # Prima di /riassunti/{id}: "oggi" non è un numero.
 @router.get("/riassunti/oggi")
 def oggi(conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
+    return riassunto_di_oggi(conn, s)
+
+
+def riassunto_di_oggi(conn: sqlite3.Connection, s: Servizi) -> dict:
     r = conn.execute("SELECT * FROM riassunto_oggi WHERE id = 1").fetchone()
     if r["giorno"] != clock.oggi().isoformat():
         # Quello che c'è è di ieri: non lo si mostra come se fosse di oggi.

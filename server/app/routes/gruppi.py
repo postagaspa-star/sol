@@ -59,7 +59,8 @@ def crea(corpo: GruppoIn, conn: sqlite3.Connection = Depends(get_conn)):
     ordine = conn.execute("SELECT COALESCE(MAX(ordine), 0) + 1 FROM gruppi").fetchone()[0]
     colore = corpo.colore or db.colore_libero(conn)  # contratto 17
     cur = conn.execute(
-        "INSERT INTO gruppi (nome, ordine, descrizione, colore) VALUES (?, ?, ?, ?)", (nome, ordine, descrizione, colore)
+        "INSERT INTO gruppi (nome, ordine, descrizione, colore, raccolta) VALUES (?, ?, ?, ?, ?)",
+        (nome, ordine, descrizione, colore, 1 if corpo.raccolta else 0),
     )
     return JSONResponse(status_code=201, content=forme.gruppo(_gruppo(conn, cur.lastrowid)))
 
@@ -80,6 +81,8 @@ def modifica(gruppo_id: int, corpo: GruppoPatch, conn: sqlite3.Connection = Depe
         conn.execute("UPDATE gruppi SET ordine = ? WHERE id = ?", (corpo.ordine, gruppo_id))
     if corpo.colore is not None:
         conn.execute("UPDATE gruppi SET colore = ? WHERE id = ?", (corpo.colore, gruppo_id))
+    if corpo.raccolta is not None:
+        conn.execute("UPDATE gruppi SET raccolta = ? WHERE id = ?", (1 if corpo.raccolta else 0, gruppo_id))
     return forme.gruppo(_gruppo(conn, gruppo_id))
 
 

@@ -8,7 +8,7 @@ from . import errori
 from .cifratura import prepara_cifrario
 from .config import VERSIONE, assicura_cartella_db, carica_settings, riassunto_config
 from .db import init_db, ripristina_dopo_riavvio
-from .routes import bozze, caselle, gruppi, impostazioni, indietro, mail, riassunti, scadenze, sistema
+from .routes import bozze, caselle, gruppi, impostazioni, indietro, mail, oggi, riassunti, scadenze, sistema
 from .servizi import crea_servizi
 
 # uvicorn.error ha già un gestore a livello INFO: le righe finiscono nel log del container.
@@ -56,4 +56,5 @@ def create_app() -> FastAPI:
     app.include_router(scadenze.router, prefix="/api")
     app.include_router(indietro.router, prefix="/api")
     app.include_router(impostazioni.router, prefix="/api")
+    app.include_router(oggi.router, prefix="/api")
     return app

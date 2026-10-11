@@ -1,6 +1,6 @@
 {
-  "server": "1.1.0",
-  "android": {"codice": 2, "nome": "1.1.0"},
-  "pc": {"codice": 2, "nome": "1.1.0"},
-  "nota": "Nuovo aspetto: gruppi colorati, riquadro Da fare, mail aperta con la risposta in evidenza e barra Invia, gesti veloci; segnale di possibile truffa."
+  "server": "2.0.0",
+  "android": {"codice": 3, "nome": "2.0.0"},
+  "pc": {"codice": 3, "nome": "2.0.0"},
+  "nota": "Sol 2.0: nuova pagina Oggi, posta raccolta per gruppi, risposta di Sol con tono in un tocco, smistamento una mail alla volta, tutorial."
 }

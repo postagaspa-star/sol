@@ -35,6 +35,7 @@ class GruppoIn(Corpo):
     nome: str = Field(min_length=1, max_length=40)
     descrizione: str | None = Field(default=None, max_length=200)
     colore: Colore | None = None
+    raccolta: StrictBool = False
 
 
 class GruppoPatch(Corpo):
@@ -42,6 +43,7 @@ class GruppoPatch(Corpo):
     ordine: int | None = Field(default=None, ge=0, le=1000)
     descrizione: str | None = Field(default=None, max_length=200)
     colore: Colore | None = None
+    raccolta: StrictBool | None = None
 
 
 class RegolaIn(Corpo):
@@ -125,3 +127,4 @@ class ImpostazioniPatch(Corpo):
     scrittori: list[Literal["groq", "cerebras", "locale"]] | None = Field(default=None, min_length=1, max_length=3)
     conserva_giorni: int | None = Field(default=None, ge=7, le=3650)
     soglia_truffa: float | None = Field(default=None, ge=0.2, le=0.9)
+    nome: str | None = None  # massimo 40 caratteri, controllato nella rotta (può essere vuoto)
