@@ -174,24 +174,65 @@ Stessa struttura, colori della tabella. Le schede si distinguono per superficie 
   apre apposta (per esempio "Cos'è la modalità prova").
 - Tono: italiano semplice, frasi corte, niente punti esclamativi, niente gergo.
 
-## 10. Tutorial interattivo
-- Parte da solo al primo avvio dopo l'abbinamento; si riapre da Impostazioni → "Come funziona Sol". Si può
-  saltare ("Salta" in alto a destra). Pallini di avanzamento in basso.
-- Stesso stile dell'app, a tutto schermo, con elementi VERI da provare su dati finti (niente chiamate al
-  server, niente invii):
-  1. **Oggi**: una pagina Oggi finta; frase grande "Ogni mattina qui trovi il punto della giornata e cosa
-     fare." L'utente tocca "Rivedi" sulla prima scheda per andare avanti.
-  2. **Risposta di Sol**: una mail finta con la risposta; "Sol ti prepara la risposta. Cambiale il tono con un
-     tocco." L'utente tocca "Più breve" e vede il testo cambiare; poi "Invia risposta" (finto) → spunta.
-  3. **Gesti**: una riga finta; "Scorri a destra per segnarla letta." → fatto; "Ora scorri a sinistra per
-     spostarla." → foglio dei gruppi → sceglie → "Annulla" appare e sparisce.
-  4. **Smista**: una scheda finta; "Quando Sol non è sicuro, decidi tu: va bene o cambia." L'utente preme
-     "Va bene" o scorre.
-  5. **Possibile truffa**: la pillola rossa e l'avviso; "Se vedi questo, telefona al mittente a un numero che
-     conosci già prima di pagare." Pulsante "Ho capito".
-  6. Fine: "Sei pronto." pulsante "Inizia" → Oggi.
-- Ogni passo: UNA frase grande (20-22, 700), niente paragrafi. Movimenti come l'app.
-- Sul PC lo stesso tutorial, con le scorciatoie al posto dei gesti (frecce, 1-9, Invio) da provare.
+## 10. Tutorial: visita guidata DENTRO l'app vera (2.1)
+La versione 2.0 è stata bocciata da Andrea: mostrava pezzi d'app staccati, "zone isolate", e non era chiara.
+Il tutorial 2.1 è una **visita guidata sulle schermate vere dell'app** (le stesse pagine, la stessa barra in
+basso, le stesse transizioni), riempite con **posta di esempio**.
+
+### Come funziona
+- **Modalità esempio**: per tutta la visita l'app usa una sorgente dati finta in memoria (stessa interfaccia del
+  client vero: stesse schermate, stessi ViewModel/stesso codice di pagina) con una casella di esempio: mail di
+  Mario Rossi (risposta pronta), Ferramenta Neri (possibile truffa), 2 mail da smistare, una newsletter, una
+  scadenza venerdì, un sollecito. Niente chiamate al server, niente invii, niente cache toccata. In cima una
+  pillola discreta "Esempio" ricorda che i dati non sono veri. Uscendo dalla visita l'app torna ai dati veri
+  esattamente dov'era.
+- **Riflettore**: un velo scuro (nero al 55%, al buio 65%) copre lo schermo tranne un "buco" arrotondato attorno
+  all'elemento di cui si parla, con un anello accento che pulsa piano. Il buco si **sposta e si ridimensiona
+  con un movimento fluido** da un elemento al successivo (e segue la pagina quando cambia).
+- **Fumetto**: vicino al buco (sopra o sotto, mai a coprirlo), scheda bianca raggio 20: in alto "2 di 9" piccolo,
+  un TITOLO corto (18/800) e UNA frase (16/500) che dice cosa fare e perché; in basso "Indietro" (testo) e,
+  solo per i passi da leggere, "Avanti" (pieno accento). Nei passi da fare non c'è "Avanti": si va avanti
+  FACENDO l'azione vera sull'elemento illuminato. "Salta la visita" sempre in alto a destra.
+- **Mano che mostra il gesto**: per i gesti (scorrere, toccare), un cerchio-dito semitrasparente anima il
+  movimento sopra l'elemento (tocco: si abbassa e rilascia; scorrere: parte a sinistra e scivola a destra con
+  una scia), ripetuto con pause finché l'utente non lo fa.
+- **Fatto bene**: quando l'utente esegue l'azione, piccolo segno di spunta nell'anello, poi il riflettore
+  scivola al passo successivo. Se tocca fuori dal buco non succede niente (il fumetto fa un piccolo scatto).
+- Movimenti: 250-350 ms, curve morbide (riflettore e fumetto insieme, cambio pagina con la transizione normale
+  dell'app). Tutti tolti se il sistema chiede meno animazioni (allora il riflettore salta e la mano diventa una
+  freccia ferma).
+
+### I passi (telefono)
+1. **Oggi → "Il punto di oggi"** (leggere): "Il punto della giornata" / "Ogni mattina Sol ti riassume qui le
+   mail che contano."
+2. **Oggi → pulsante "Rivedi" di Mario Rossi** (fare: tocco): "Le cose da fare" / "Qui c'è quello che ti
+   aspetta. Tocca Rivedi per aprire la mail di Rossi." → si apre la mail vera.
+3. **Mail → scheda "Risposta di Sol"** (leggere): "La risposta è già pronta" / "Sol l'ha scritta per te. Se
+   vuoi cambiare qualcosa, scrivi direttamente nel testo."
+4. **Mail → pillola "Più breve"** (fare: tocco): "Cambia il tono" / "Tocca Più breve: Sol la riscrive in un
+   attimo." → il testo cambia con la sua animazione.
+5. **Mail → "Invia risposta"** (fare: tocco) e poi **"Invia" nel foglio di conferma**: "Mandala" / "Quando va
+   bene, tocca Invia. È un esempio: non parte niente." → spunta, ritorno alla Posta.
+6. **Posta → riga di Laura Bianchi, gesto a destra** (fare: scorri): "Segna come letta" / "Scorri la mail
+   verso destra."
+7. **Stessa riga, gesto a sinistra** (fare: scorri), poi scelta del gruppo nel foglio, poi **"Annulla"**
+   illuminato per 3 secondi (leggere): "Spostala in un gruppo" / "Scorri verso sinistra e scegli dove va. Se
+   sbagli, c'è Annulla."
+8. **Posta → scheda "2 mail da sistemare" → "Smista"** (fare: tocco) e poi **"Va bene"** sulla prima scheda
+   (fare): "Quando Sol non è sicuro" / "Ti fa vedere la mail e il gruppo che propone. Se è giusto, Va bene."
+9. **Posta → riga di Ferramenta Neri con "Possibile truffa"** (leggere, pulsante "Ho capito"): "Attenzione
+   alle truffe" / "Se vedi questa etichetta, prima di pagare telefona al mittente a un numero che conosci già."
+10. Fine: il velo si dissolve, fumetto al centro "Ecco fatto" / "Adesso Sol lavora con la tua posta vera."
+   [Inizia] → app sui dati veri, pagina Oggi.
+
+### Sul PC
+Stessa visita sulle schermate vere del programma, con il riflettore sugli elementi della finestra (colonna,
+elenco, mail aperta). Al posto dei gesti si provano i tasti: passo 6 "Premi L per segnarla letta", passo 7
+"Premi 2 per spostarla in Fornitori" (poi Annulla), passo 8 "Premi Invio per dire Va bene"; un tasto disegnato
+nel fumetto si "preme" con un'animazione finché l'utente non lo preme davvero.
+
+- Parte da sola la prima volta dopo l'abbinamento (e dopo l'aggiornamento alla 2.1, una volta); si riapre da
+  Impostazioni → "Come funziona Sol".
 
 ## 11. Cosa NON cambia
 Contratto delle API e tutte le garanzie: invio solo con conferma della versione riletta, campi bloccati
