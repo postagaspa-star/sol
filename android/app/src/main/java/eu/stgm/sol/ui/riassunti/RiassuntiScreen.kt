@@ -1,30 +1,39 @@
 package eu.stgm.sol.ui.riassunti
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,19 +41,26 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.sol.dati.Riassunto
 import eu.stgm.sol.ui.AvvisoLettura
-import eu.stgm.sol.ui.BarraCaricamento
-import eu.stgm.sol.ui.FasciaCalda
-import eu.stgm.sol.ui.PulsanteImpostazioni
-import eu.stgm.sol.ui.PulsantePieno
+import eu.stgm.sol.ui.EtichettaMaiuscola
+import eu.stgm.sol.ui.Icone
+import eu.stgm.sol.ui.MARGINE
+import eu.stgm.sol.ui.PulsanteGrande
 import eu.stgm.sol.ui.PulsanteTesto
 import eu.stgm.sol.ui.Riquadro
-import eu.stgm.sol.ui.Superficie
-import eu.stgm.sol.ui.TitoloSezione
-import eu.stgm.sol.ui.dettaglio.AIUTO_DETTATURA
+import eu.stgm.sol.ui.RigaSottile
+import eu.stgm.sol.ui.Scheda
+import eu.stgm.sol.ui.TestaSezioneElenco
+import eu.stgm.sol.ui.TestataPagina
+import eu.stgm.sol.ui.ombra
 import eu.stgm.sol.ui.quandoCompleto
+import eu.stgm.sol.ui.tema.Sol
 import eu.stgm.sol.ui.testoConRiferimenti
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Riassunti (docs/aspetto.md §7): la scheda di oggi, il campo grande "Cosa vuoi
+ * sapere?", la risposta in una scheda coi riferimenti toccabili e quelli chiesti di
+ * recente.
+ */
 @Composable
 fun RiassuntiScreen(vm: RiassuntiViewModel, onApriMail: (Long) -> Unit) {
     val stato by vm.stato.collectAsStateWithLifecycle()
@@ -54,75 +70,82 @@ fun RiassuntiScreen(vm: RiassuntiViewModel, onApriMail: (Long) -> Unit) {
         vm.riprendi()
         onDispose { vm.sospendi() }
     }
+    val c = Sol.colori
+    val t = Sol.testi
 
-    Column(Modifier.fillMaxSize()) {
-        FasciaCalda("Riassunti") {
-            IconButton(onClick = vm::carica) { Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna") }
-            PulsanteImpostazioni()
-        }
-        BarraCaricamento(stato.caricamento)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .statusBarsPadding()
+            .padding(start = MARGINE, end = MARGINE, top = 14.dp, bottom = 28.dp),
+    ) {
+        TestataPagina("Riassunti")
+        AvvisoLettura(stato.errore, stato.daCacheDel, vm::carica, Modifier.padding(top = 12.dp))
+
+        val forma = RoundedCornerShape(24.dp)
         Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.padding(top = 18.dp).fillMaxWidth().ombra(forma, rilievo = true).background(c.superficie, forma).padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            AvvisoLettura(stato.errore, stato.daCacheDel, vm::carica)
-
-            TitoloSezione("Oggi")
+            EtichettaMaiuscola("Oggi")
             val oggi = stato.oggi
-            if (oggi == null) {
+            val testo = oggi?.testoVisibile.orEmpty()
+            if (testo.isBlank()) {
                 Text(
                     if (stato.caricamento) "Carico il riassunto di oggi..." else "Il riassunto di oggi non è ancora pronto.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = t.riassunto,
+                    color = c.tenue,
                 )
             } else {
-                Riquadrato {
-                    TestoRiassunto(oggi.testoVisibile.ifBlank { "Il riassunto di oggi non è ancora pronto." }, onApriMail)
-                    oggi.aggiornatoIl?.let {
-                        Text(
-                            "Aggiornato ${quandoCompleto(it)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
+                Text(testoConRiferimenti(testo, c.testo, onApriMail), style = t.riassunto, color = c.testo)
             }
+            oggi?.aggiornatoIl?.let {
+                Text("Aggiornato ${quandoCompleto(it)}", style = t.piccolo, color = c.moltoTenue)
+            }
+        }
 
-            TitoloSezione("Chiedi un riassunto")
-            OutlinedTextField(
-                value = stato.richiesta,
-                onValueChange = vm::cambiaRichiesta,
-                placeholder = { Text("Esempio: cosa ha scritto Bianchi questa settimana") },
-                supportingText = { Text(AIUTO_DETTATURA) },
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { vm.chiedi() }),
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-            )
-            PulsantePieno(
-                if (stato.inCorso) "Sol sta scrivendo..." else "Chiedi",
-                onClick = vm::chiedi,
-                abilitato = !stato.inCorso,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
-            stato.erroreAzione?.let {
-                Riquadro(
-                    it,
-                    grave = true,
-                    azione = if (stato.sospeso) "Riprova" else "Chiudi",
-                    onAzione = if (stato.sospeso) vm::riprendi else vm::consumaErroreAzione,
-                    modifier = Modifier.padding(top = 8.dp),
+        // Il campo grande: si scrive o si detta col microfono della tastiera.
+        val formaCampo = RoundedCornerShape(20.dp)
+        Column(Modifier.padding(top = 22.dp).fillMaxWidth().ombra(formaCampo).background(c.superficie, formaCampo).padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 14.dp)) {
+            Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                if (stato.richiesta.isEmpty()) Text("Cosa vuoi sapere?", style = t.riassunto, color = c.moltoTenue)
+                BasicTextField(
+                    value = stato.richiesta,
+                    onValueChange = vm::cambiaRichiesta,
+                    textStyle = t.riassunto.copy(color = c.testo),
+                    cursorBrush = SolidColor(c.accento),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { vm.chiedi() }),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Cosa vuoi sapere?" },
                 )
             }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Spacer(Modifier.weight(1f))
+                PulsanteGrande(if (stato.inCorso) "Sol sta scrivendo…" else "Chiedi", vm::chiedi, abilitato = !stato.inCorso, altezza = 48.dp)
+            }
+        }
+        stato.erroreAzione?.let {
+            Riquadro(
+                it,
+                grave = true,
+                azione = if (stato.sospeso) "Riprova" else "Chiudi",
+                onAzione = if (stato.sospeso) vm::riprendi else vm::consumaErroreAzione,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
 
-            stato.corrente?.let { corrente ->
-                Riquadrato(Modifier.padding(top = 16.dp)) {
-                    corrente.richiesta?.let {
-                        Text("«$it»", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(bottom = 8.dp))
+        stato.corrente?.let { corrente ->
+            Scheda(Modifier.padding(top = 16.dp), raggio = 24.dp, rilievo = true) {
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icone.Sole, contentDescription = null, tint = c.accento, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(corrente.richiesta ?: "Riassunto", style = t.secondario, fontWeight = FontWeight.ExtraBold, color = c.accentoTesto, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
-                    if (stato.seguendo) LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 8.dp))
+                    if (stato.seguendo) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp), color = c.accento, trackColor = c.traccia, gapSize = 0.dp)
+                    }
                     val testo = corrente.testoVisibile
                     if (testo.isBlank()) {
                         Text(
@@ -131,36 +154,30 @@ fun RiassuntiScreen(vm: RiassuntiViewModel, onApriMail: (Long) -> Unit) {
                                 corrente.inCorso -> "Sol ci sta ancora lavorando."
                                 else -> "Nessun testo."
                             },
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = t.testo,
+                            color = c.tenue,
                         )
                     } else {
-                        TestoRiassunto(testo, onApriMail)
+                        Text(testoConRiferimenti(testo, c.testo, onApriMail), style = t.testo, color = c.testo)
                     }
-                    if (!stato.seguendo) PulsanteTesto("Chiudi", vm::chiudiCorrente)
+                    if (!stato.seguendo) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { PulsanteTesto("Chiudi", vm::chiudiCorrente) }
+                    }
                 }
             }
+        }
 
-            val recenti = stato.recenti.filter { it.id != stato.corrente?.id }
-            if (recenti.isNotEmpty()) {
-                TitoloSezione("Chiesti di recente")
-                recenti.forEach { r ->
+        val recenti = stato.recenti.filter { it.id != stato.corrente?.id }
+        if (recenti.isNotEmpty()) {
+            TestaSezioneElenco("Chiesti di recente", Modifier.padding(top = 22.dp))
+            Scheda(Modifier.padding(top = 8.dp)) {
+                recenti.forEachIndexed { i, r ->
+                    if (i > 0) RigaSottile(16.dp)
                     RigaRecente(r, onClick = { vm.apri(r) })
-                    HorizontalDivider()
                 }
             }
         }
     }
-}
-
-@Composable
-private fun TestoRiassunto(testo: String, onApriMail: (Long) -> Unit) {
-    val colore = MaterialTheme.colorScheme.primary
-    Text(testoConRiferimenti(testo, colore, onApriMail), style = MaterialTheme.typography.bodyLarge)
-}
-
-@Composable
-private fun Riquadrato(modifier: Modifier = Modifier, contenuto: @Composable () -> Unit) {
-    Superficie(modifier) { Column(Modifier.padding(16.dp)) { contenuto() } }
 }
 
 @Composable
@@ -170,9 +187,9 @@ private fun RigaRecente(r: Riassunto, onClick: () -> Unit) {
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        Text(r.richiesta ?: "Riassunto", style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(r.richiesta ?: "Riassunto", style = Sol.testi.medio, fontWeight = FontWeight.SemiBold, color = Sol.colori.testo, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(
             listOfNotNull(
                 quandoCompleto(r.creatoIl).ifBlank { null },
@@ -182,8 +199,8 @@ private fun RigaRecente(r: Riassunto, onClick: () -> Unit) {
                     else -> null
                 },
             ).joinToString(" · "),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = Sol.testi.piccolo,
+            color = Sol.colori.moltoTenue,
         )
     }
 }

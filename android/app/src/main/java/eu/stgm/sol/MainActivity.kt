@@ -10,33 +10,36 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -49,24 +52,35 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.sol.aggiornamento.AppInPrimoPiano
 import eu.stgm.sol.dati.Bozza
+import eu.stgm.sol.dati.TemaScelto
 import eu.stgm.sol.notifiche.Notificatore
 import eu.stgm.sol.rete.Configurazione
-import eu.stgm.sol.rete.IndirizzoServer
 import eu.stgm.sol.ui.DialogoConferma
-import eu.stgm.sol.ui.LocalApriImpostazioni
+import eu.stgm.sol.ui.FoglioSol
+import eu.stgm.sol.ui.Icone
+import eu.stgm.sol.ui.IconeBarraDiStato
+import eu.stgm.sol.ui.MessaggioSol
 import eu.stgm.sol.ui.Navigazione
 import eu.stgm.sol.ui.Pagina
-import eu.stgm.sol.ui.PulsantePieno
+import eu.stgm.sol.ui.PulsanteGrande
+import eu.stgm.sol.ui.PulsanteGrandeBianco
 import eu.stgm.sol.ui.PulsanteTesto
-import eu.stgm.sol.ui.PulsanteVuoto
 import eu.stgm.sol.ui.Scheda
 import eu.stgm.sol.ui.abbinamento.AbbinamentoScreen
 import eu.stgm.sol.ui.abbinamento.AbbinamentoViewModel
@@ -78,19 +92,37 @@ import eu.stgm.sol.ui.impostazioni.ImpostazioniScreen
 import eu.stgm.sol.ui.impostazioni.ImpostazioniViewModel
 import eu.stgm.sol.ui.indietro.IndietroScreen
 import eu.stgm.sol.ui.indietro.IndietroViewModel
+import eu.stgm.sol.ui.oggi.AzioniOggi
+import eu.stgm.sol.ui.oggi.OggiScreen
+import eu.stgm.sol.ui.oggi.OggiViewModel
+import eu.stgm.sol.ui.posta.PallinoNumero
 import eu.stgm.sol.ui.posta.PostaScreen
 import eu.stgm.sol.ui.posta.PostaViewModel
+import eu.stgm.sol.ui.posta.RaccoltaScreen
+import eu.stgm.sol.ui.posta.RicercaScreen
 import eu.stgm.sol.ui.riassunti.RiassuntiScreen
 import eu.stgm.sol.ui.riassunti.RiassuntiViewModel
 import eu.stgm.sol.ui.scadenze.ScadenzeScreen
 import eu.stgm.sol.ui.scadenze.ScadenzeViewModel
-import eu.stgm.sol.ui.tema.LocalSegni
+import eu.stgm.sol.ui.smista.SmistaScreen
+import eu.stgm.sol.ui.smista.SmistaViewModel
+import eu.stgm.sol.ui.tema.Sol
 import eu.stgm.sol.ui.tema.SolTema
+import eu.stgm.sol.ui.tutorial.TutorialAlPrimoAvvio
+import eu.stgm.sol.ui.tutorial.TutorialScreen
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** I messaggi brevi in basso ("Mail inviata", "Spostata in Clienti"), di tutta l'app. */
 val LocalMessaggi = staticCompositionLocalOf { SnackbarHostState() }
+
+/** Il tema scelto nelle Impostazioni, tradotto in chiaro o scuro. */
+@Composable
+fun temaScuro(tema: TemaScelto): Boolean = when (tema) {
+    TemaScelto.AUTOMATICO -> isSystemInDarkTheme()
+    TemaScelto.CHIARO -> false
+    TemaScelto.SCURO -> true
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -105,9 +137,14 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null && !daiRecenti) richiesta.value = intent?.paginaDellaNotifica()
         intent?.removeExtra(EXTRA_MAIL_ID)
         intent?.removeExtra(EXTRA_BOZZA_ID)
+        val app = application as SolApp
         setContent {
-            SolTema {
+            val tema by app.archivio.tema.collectAsState(initial = TemaScelto.AUTOMATICO)
+            val scuro = temaScuro(tema)
+            SolTema(scuro = scuro) {
+                IconeBarraDiStato(scure = !scuro)
                 Radice(
+                    tema = tema,
                     richiesta = richiesta.value,
                     onRichiestaConsumata = { richiesta.value = null },
                     onNuovoAbbinamento = ::ricomincia,
@@ -166,8 +203,15 @@ private sealed interface StatoAvvio {
     data class Pronto(val configurazione: Configurazione?) : StatoAvvio
 }
 
+/**
+ * In alto niente margine: ogni pagina passa sotto la barra di stato e ci pensa da
+ * sé; ai lati e in basso sì.
+ */
+private val InsetsSottoLaBarra: WindowInsets
+    @Composable get() = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+
 @Composable
-private fun Radice(richiesta: Pagina?, onRichiestaConsumata: () -> Unit, onNuovoAbbinamento: () -> Unit) {
+private fun Radice(tema: TemaScelto, richiesta: Pagina?, onRichiestaConsumata: () -> Unit, onNuovoAbbinamento: () -> Unit) {
     val app = LocalContext.current.applicationContext as SolApp
     val avvio by remember { app.archivio.flusso.map<Configurazione?, StatoAvvio> { StatoAvvio.Pronto(it) } }
         .collectAsState(initial = StatoAvvio.Lettura)
@@ -184,10 +228,14 @@ private fun Radice(richiesta: Pagina?, onRichiestaConsumata: () -> Unit, onNuovo
     val messaggi = remember { SnackbarHostState() }
     CompositionLocalProvider(LocalMessaggi provides messaggi) {
         when (val a = avvio) {
-            StatoAvvio.Lettura -> Unit
+            StatoAvvio.Lettura -> Box(Modifier.fillMaxSize().background(Sol.colori.fondo))
             is StatoAvvio.Pronto ->
                 if (a.configurazione == null) {
-                    Scaffold(snackbarHost = { SnackbarHost(messaggi) }, contentWindowInsets = InsetsSottoLaFascia) { padding ->
+                    Scaffold(
+                        snackbarHost = { SnackbarHost(messaggi) { MessaggioSol(it) } },
+                        contentWindowInsets = InsetsSottoLaBarra,
+                        containerColor = Sol.colori.fondo,
+                    ) { padding ->
                         Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
                             val vm: AbbinamentoViewModel = viewModel {
                                 AbbinamentoViewModel(app.archivio, prima = { app.svuotaDatiLocali() })
@@ -197,61 +245,87 @@ private fun Radice(richiesta: Pagina?, onRichiestaConsumata: () -> Unit, onNuovo
                         }
                     }
                 } else {
-                    App(app, messaggi, richiesta, onRichiestaConsumata, onNuovoAbbinamento)
+                    App(app, tema, messaggi, richiesta, onRichiestaConsumata, onNuovoAbbinamento)
                 }
         }
     }
 }
 
 private val IconeSchede: Map<Scheda, ImageVector> = mapOf(
-    Scheda.POSTA to Icons.Filled.Email,
-    Scheda.RIASSUNTI to Icons.AutoMirrored.Filled.List,
-    Scheda.INDIETRO to Icons.Filled.Notifications,
-    Scheda.SCADENZE to Icons.Filled.DateRange,
+    Scheda.OGGI to Icone.Oggi,
+    Scheda.POSTA to Icone.Posta,
+    Scheda.RIASSUNTI to Icone.Riassunti,
 )
 
 /**
- * In alto niente margine: la fascia calda (o l'intestazione della mail) passa sotto
- * la barra di stato e ci pensa da sé.
+ * La barra in basso a 3 voci (docs/prototipo/Main.dc.html): la voce attiva ha la
+ * pillola accento tenue dietro l'icona e il testo nell'accento; Posta ha il pallino
+ * col numero delle importanti da leggere.
  */
-private val InsetsSottoLaFascia: WindowInsets
-    @Composable get() = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-
-/** La barra in basso con le quattro schede di tutti i giorni; la scelta nel colore dell'accento. */
 @Composable
-fun BarraSchede(scelta: Scheda, onScegli: (Scheda) -> Unit) {
-    val segni = LocalSegni.current
-    val colori = NavigationBarItemDefaults.colors(
-        selectedIconColor = segni.attivo,
-        selectedTextColor = segni.attivo,
-        indicatorColor = segni.accentoTenue,
-        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Scheda.entries.forEach { scheda ->
-            NavigationBarItem(
-                selected = scelta == scheda,
-                onClick = { onScegli(scheda) },
-                colors = colori,
-                icon = { Icon(IconeSchede.getValue(scheda), contentDescription = null) },
-                label = {
-                    // 14 sp: "In sospeso" ci sta intero anche su un telefono da 360 dp.
-                    Text(
-                        scheda.etichetta,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-            )
+fun BarraSchede(scelta: Scheda, daLeggere: Int, onScegli: (Scheda) -> Unit) {
+    val c = Sol.colori
+    Column(Modifier.fillMaxWidth().background(c.barraSfondo)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(c.barraLinea))
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(top = 10.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Scheda.entries.forEach { scheda ->
+                VoceBarra(scheda, attiva = scheda == scelta, numero = if (scheda == Scheda.POSTA) daLeggere else 0) { onScegli(scheda) }
+            }
         }
+    }
+}
+
+@Composable
+private fun VoceBarra(scheda: Scheda, attiva: Boolean, numero: Int, onClick: () -> Unit) {
+    val c = Sol.colori
+    val colore = if (attiva) c.accentoTesto else c.barraInattiva
+    val descrizione = if (numero > 0) "${scheda.etichetta}, $numero da leggere" else scheda.etichetta
+    Column(
+        Modifier
+            .widthIn(min = 72.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = false, radius = 40.dp),
+                onClick = onClick,
+            )
+            .semantics(mergeDescendants = true) {
+                role = Role.Tab
+                selected = attiva
+                contentDescription = descrizione
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .width(64.dp)
+                .height(32.dp)
+                .background(if (attiva) c.accentoTenueForte else c.barraSfondo.copy(alpha = 0f), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(IconeSchede.getValue(scheda), contentDescription = null, tint = colore, modifier = Modifier.size(22.dp))
+            // Il bordo sinistro del pallino resta fermo: con "99+" cresce verso destra, non copre l'icona.
+            if (numero > 0) PallinoNumero(numero, Modifier.align(Alignment.TopStart).offset(x = 34.dp))
+        }
+        Text(
+            scheda.etichetta,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = if (attiva) FontWeight.Bold else FontWeight.SemiBold,
+            fontFamily = Sol.testi.etichetta.fontFamily,
+            color = colore,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 
 @Composable
 private fun App(
     app: SolApp,
+    tema: TemaScelto,
     messaggi: SnackbarHostState,
     richiesta: Pagina?,
     onRichiestaConsumata: () -> Unit,
@@ -260,10 +334,16 @@ private fun App(
     var codice by rememberSaveable { mutableStateOf(Navigazione().codifica()) }
     val nav = remember(codice) { Navigazione.decodifica(codice) }
     val vai: (Navigazione) -> Unit = { codice = it.codifica() }
+    val ambito = rememberCoroutineScope()
     // Il sollecito appena chiesto: la pagina della bozza lo mostra subito, senza rileggerlo.
     var sollecitoAppena by remember { mutableStateOf<Bozza?>(null) }
 
+    val oggiVm: OggiViewModel = viewModel { OggiViewModel(app.client, app.cache) }
     val postaVm: PostaViewModel = viewModel { PostaViewModel(app.client, app.cache) }
+    // Raccolta e ricerca hanno il loro elenco: la Posta resta com'era tornando indietro.
+    val raccoltaVm: PostaViewModel = viewModel(key = "raccolta") { PostaViewModel(app.client, app.cache) }
+    val ricercaVm: PostaViewModel = viewModel(key = "ricerca") { PostaViewModel(app.client, app.cache) }
+    val smistaVm: SmistaViewModel = viewModel { SmistaViewModel(app.client) }
     val dettaglioVm: DettaglioViewModel = viewModel {
         DettaglioViewModel(app.client, app.cache, memoriaBozze = app.bozzeInModifica)
     }
@@ -277,9 +357,9 @@ private fun App(
     val abbinamentoVm: AbbinamentoViewModel = viewModel {
         AbbinamentoViewModel(app.archivio, prima = { app.svuotaDatiLocali() })
     }
-
-    val configurazione by app.archivio.flusso.collectAsState(initial = null)
-    val nonProtetto = IndirizzoServer.nonProtetto(configurazione?.server)
+    // Il pallino della Posta si vede anche da Oggi: i conteggi si leggono all'avvio.
+    LaunchedEffect(Unit) { postaVm.carica() }
+    val statoPosta by postaVm.stato.collectAsStateWithLifecycle()
 
     // Arrivo da una notifica mentre si sta scrivendo una risposta: prima si chiede.
     var inSospeso by remember { mutableStateOf<Pagina?>(null) }
@@ -291,66 +371,81 @@ private fun App(
             is Pagina.Bozza -> bozzaVm.bozza.haModificheNonSalvate()
             else -> false
         }
-        if (scrivendo && nav.inCima != pagina) inSospeso = pagina else vai(Navigazione(Scheda.POSTA).apri(pagina))
+        if (scrivendo && nav.inCima != pagina) inSospeso = pagina else vai(Navigazione().apri(pagina))
     }
+
+    // Al primo avvio dopo l'abbinamento, una volta sola (docs/aspetto.md §10).
+    TutorialAlPrimoAvvio(app.archivio) { vai(nav.apri(Pagina.Tutorial)) }
 
     val dopoIndietro = nav.indietro()
     BackHandler(enabled = dopoIndietro != null) { dopoIndietro?.let(vai) }
 
-    RichiestaNotifiche()
+    // La richiesta degli avvisi aspetta la fine del tutorial: una cosa alla volta.
+    val tutorialVisto by app.archivio.tutorialVisto.collectAsState(initial = null)
+    if (tutorialVisto == true && nav.inCima != Pagina.Tutorial) RichiestaNotifiche()
 
     val apriMail: (Long) -> Unit = { vai(nav.apri(Pagina.Mail(it))) }
+    val apriBozza: (Long, Bozza?) -> Unit = { id, appena ->
+        sollecitoAppena = appena
+        vai(nav.apri(Pagina.Bozza(id)))
+    }
     val indietro: () -> Unit = { vai(dopoIndietro ?: Navigazione()) }
 
     // Ogni scheda tiene il suo stato (scorrimento, filtri) anche quando si apre
     // una mail e si torna indietro: altrimenti la lista ripartirebbe dall'inizio.
     val statoSchede = rememberSaveableStateHolder()
 
-    CompositionLocalProvider(LocalApriImpostazioni provides { vai(nav.apri(Pagina.Impostazioni)) }) {
-        Scaffold(
-            bottomBar = { if (nav.inCima == null) BarraSchede(nav.scheda) { vai(nav.scegli(it)) } },
-            snackbarHost = { SnackbarHost(messaggi) },
-            contentWindowInsets = InsetsSottoLaFascia,
-        ) { padding ->
-            Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
-                when (val pagina = nav.inCima) {
-                    is Pagina.Mail -> DettaglioScreen(dettaglioVm, pagina.id, onIndietro = indietro)
-                    is Pagina.Bozza -> BozzaScreen(
-                        bozzaVm,
-                        pagina.id,
-                        giaLetta = sollecitoAppena,
-                        onApriMail = apriMail,
-                        onIndietro = indietro,
-                    )
-                    Pagina.Impostazioni -> ImpostazioniScreen(
-                        impostazioniVm,
-                        onIndietro = indietro,
-                        onAbbinaDiNuovo = { vai(nav.apri(Pagina.Abbinamento)) },
-                        onScollegato = onNuovoAbbinamento,
-                    )
-                    Pagina.Abbinamento -> {
-                        LaunchedEffect(Unit) { abbinamentoVm.proponiIndirizzo(app.archivio.ultimoServer()) }
-                        AbbinamentoScreen(abbinamentoVm, onFatto = onNuovoAbbinamento, onAnnulla = indietro)
-                    }
-                    null -> statoSchede.SaveableStateProvider(nav.scheda.name) {
-                        when (nav.scheda) {
-                            Scheda.POSTA -> PostaScreen(
-                                postaVm,
-                                onApriMail = apriMail,
-                                collegamentoNonProtetto = nonProtetto,
-                                onApriScadenze = { vai(nav.scegli(Scheda.SCADENZE)) },
-                            )
-                            Scheda.RIASSUNTI -> RiassuntiScreen(riassuntiVm, onApriMail = apriMail)
-                            Scheda.INDIETRO -> IndietroScreen(
-                                indietroVm,
-                                onApriMail = apriMail,
-                                onApriBozza = { id, appena ->
-                                    sollecitoAppena = appena
-                                    vai(nav.apri(Pagina.Bozza(id)))
-                                },
-                            )
-                            Scheda.SCADENZE -> ScadenzeScreen(scadenzeVm, onApriMail = apriMail)
-                        }
+    Scaffold(
+        bottomBar = { if (nav.inCima == null) BarraSchede(nav.scheda, statoPosta.daLeggere) { vai(nav.scegli(it)) } },
+        snackbarHost = { SnackbarHost(messaggi) { MessaggioSol(it) } },
+        contentWindowInsets = InsetsSottoLaBarra,
+        containerColor = Sol.colori.fondo,
+    ) { padding ->
+        Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
+            when (val pagina = nav.inCima) {
+                is Pagina.Mail -> DettaglioScreen(dettaglioVm, pagina.id, onIndietro = indietro)
+                is Pagina.Bozza -> BozzaScreen(bozzaVm, pagina.id, giaLetta = sollecitoAppena, onApriMail = apriMail, onIndietro = indietro)
+                is Pagina.Raccolta -> RaccoltaScreen(raccoltaVm, pagina.gruppoId, onApriMail = apriMail, onIndietro = indietro)
+                Pagina.Impostazioni -> ImpostazioniScreen(
+                    impostazioniVm,
+                    tema = tema,
+                    onTema = { scelto -> ambito.launch { app.archivio.cambiaTema(scelto) } },
+                    onIndietro = indietro,
+                    onAbbinaDiNuovo = { vai(nav.apri(Pagina.Abbinamento)) },
+                    onScollegato = onNuovoAbbinamento,
+                    onComeFunziona = { vai(nav.apri(Pagina.Tutorial)) },
+                )
+                Pagina.Abbinamento -> {
+                    LaunchedEffect(Unit) { abbinamentoVm.proponiIndirizzo(app.archivio.ultimoServer()) }
+                    AbbinamentoScreen(abbinamentoVm, onFatto = onNuovoAbbinamento, onAnnulla = indietro)
+                }
+                Pagina.Smista -> SmistaScreen(smistaVm, onChiudi = indietro)
+                Pagina.Ricerca -> RicercaScreen(ricercaVm, onApriMail = apriMail, onIndietro = indietro)
+                Pagina.Scadenze -> ScadenzeScreen(scadenzeVm, onIndietro = indietro, onApriMail = apriMail)
+                Pagina.AspettiRisposta -> IndietroScreen(indietroVm, onApriMail = apriMail, onApriBozza = apriBozza, onIndietro = indietro)
+                // "Inizia" porta sempre a Oggi, anche se il tutorial è stato riaperto dalle Impostazioni.
+                Pagina.Tutorial -> TutorialScreen(onFine = { vai(Navigazione()) })
+                null -> statoSchede.SaveableStateProvider(nav.scheda.name) {
+                    when (nav.scheda) {
+                        Scheda.OGGI -> OggiScreen(
+                            oggiVm,
+                            AzioniOggi(
+                                apriMail = apriMail,
+                                apriBozza = apriBozza,
+                                apriSmista = { vai(nav.apri(Pagina.Smista)) },
+                                apriScadenze = { vai(nav.apri(Pagina.Scadenze)) },
+                                apriAspetti = { vai(nav.apri(Pagina.AspettiRisposta)) },
+                                apriImpostazioni = { vai(nav.apri(Pagina.Impostazioni)) },
+                            ),
+                        )
+                        Scheda.POSTA -> PostaScreen(
+                            postaVm,
+                            onApriMail = apriMail,
+                            onApriSmista = { vai(nav.apri(Pagina.Smista)) },
+                            onApriRaccolta = { vai(nav.apri(Pagina.Raccolta(it))) },
+                            onApriRicerca = { vai(nav.apri(Pagina.Ricerca)) },
+                        )
+                        Scheda.RIASSUNTI -> RiassuntiScreen(riassuntiVm, onApriMail = apriMail)
                     }
                 }
             }
@@ -362,11 +457,11 @@ private fun App(
         DialogoModificheInCorso(
             onSalva = {
                 inSospeso = null
-                gestore.salvaModifica(poi = { vai(Navigazione(Scheda.POSTA).apri(destinazione)) })
+                gestore.salvaModifica(poi = { vai(Navigazione().apri(destinazione)) })
             },
             onApri = {
                 inSospeso = null
-                vai(Navigazione(Scheda.POSTA).apri(destinazione))
+                vai(Navigazione().apri(destinazione))
             },
             onResta = { inSospeso = null },
         )
@@ -379,22 +474,19 @@ private fun App(
  */
 @Composable
 internal fun DialogoModificheInCorso(onSalva: () -> Unit, onApri: () -> Unit, onResta: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onResta,
-        title = { Text("Salvare le modifiche?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Stai scrivendo una risposta. Se apri l'altra mail senza salvare, il testo resta qui sul " +
-                        "telefono e lo ritrovi tornando su questa.",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                PulsantePieno("Salva e apri", onSalva, modifier = Modifier.fillMaxWidth())
-                PulsanteVuoto("Apri senza salvare", onApri, modifier = Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = { PulsanteTesto("Resta qui", onResta) },
-    )
+    FoglioSol(onChiudi = onResta, titolo = "Salvare le modifiche?") {
+        Text(
+            "Stai scrivendo una risposta. Se apri l'altra mail senza salvare, il testo resta qui sul " +
+                "telefono e lo ritrovi tornando su questa.",
+            style = Sol.testi.testo,
+            color = Sol.colori.testoCorpo,
+        )
+        PulsanteGrande("Salva e apri", onSalva, Modifier.fillMaxWidth().padding(top = 20.dp))
+        PulsanteGrandeBianco("Apri senza salvare", onApri, Modifier.fillMaxWidth().padding(top = 10.dp))
+        Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
+            PulsanteTesto("Resta qui", onResta, colore = Sol.colori.tenue)
+        }
+    }
 }
 
 /**
@@ -429,5 +521,6 @@ private fun RichiestaNotifiche() {
             lancio.launch(Manifest.permission.POST_NOTIFICATIONS)
         },
         onAnnulla = chiudi,
+        annulla = "Non ora",
     )
 }

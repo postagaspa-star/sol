@@ -3,53 +3,53 @@ package eu.stgm.sol.ui.tema
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 
 /**
  * I 12 colori dei gruppi (docs/aspetto.md §1, contratto 17). Il server manda il
- * NOME ([nome]); l'app lo traduce in tinte adatte al tema. [base]: i cerchi con le
- * iniziali e la scheda scelta, sempre con testo bianco sopra.
+ * NOME; l'app lo traduce. [pieno]: il pallino delle sezioni; [tenue] + [inchiostro]:
+ * il cerchio con le iniziali e la pillola del gruppo. I primi sei sono quelli del
+ * prototipo, gli altri seguono la stessa logica.
  */
-enum class ColoreGruppo(
-    val nome: String,
-    val base: Color,
-    val chiaroFondo: Color,
-    val chiaroTesto: Color,
-    val scuroFondo: Color,
-    val scuroTesto: Color,
-) {
-    BLU("blu", Color(0xFF1D4ED8), Color(0xFFDBEAFE), Color(0xFF1E40AF), Color(0xFF1E3A8A), Color(0xFFBFDBFE)),
-    VERDE("verde", Color(0xFF15803D), Color(0xFFDCFCE7), Color(0xFF166534), Color(0xFF14532D), Color(0xFFBBF7D0)),
-    AMBRA("ambra", Color(0xFFB45309), Color(0xFFFEF3C7), Color(0xFF92400E), Color(0xFF78350F), Color(0xFFFDE68A)),
-    VIOLA("viola", Color(0xFF7E22CE), Color(0xFFF3E8FF), Color(0xFF6B21A8), Color(0xFF581C87), Color(0xFFE9D5FF)),
-    GRIGIO("grigio", Color(0xFF4B5563), Color(0xFFF3F4F6), Color(0xFF374151), Color(0xFF374151), Color(0xFFE5E7EB)),
-    ARDESIA("ardesia", Color(0xFF334155), Color(0xFFE2E8F0), Color(0xFF1E293B), Color(0xFF1E293B), Color(0xFFCBD5E1)),
-    PETROLIO("petrolio", Color(0xFF0F766E), Color(0xFFCCFBF1), Color(0xFF115E59), Color(0xFF134E4A), Color(0xFF99F6E4)),
-    ROSA("rosa", Color(0xFFBE185D), Color(0xFFFCE7F3), Color(0xFF9D174D), Color(0xFF831843), Color(0xFFFBCFE8)),
-    INDACO("indaco", Color(0xFF4338CA), Color(0xFFE0E7FF), Color(0xFF3730A3), Color(0xFF312E81), Color(0xFFC7D2FE)),
-    OLIVA("oliva", Color(0xFF4D7C0F), Color(0xFFECFCCB), Color(0xFF3F6212), Color(0xFF365314), Color(0xFFD9F99D)),
-    MARRONE("marrone", Color(0xFF92400E), Color(0xFFFFEDD5), Color(0xFF7C2D12), Color(0xFF7C2D12), Color(0xFFFED7AA)),
-    CIANO("ciano", Color(0xFF0E7490), Color(0xFFCFFAFE), Color(0xFF155E75), Color(0xFF164E63), Color(0xFFA5F3FC)),
+enum class ColoreGruppo(val nome: String, val pieno: Color, val tenue: Color, val inchiostro: Color) {
+    BLU("blu", Color(0xFF2F6FDB), Color(0xFFEAF1FD), Color(0xFF1E4FA8)),
+    VERDE("verde", Color(0xFF2B8A3E), Color(0xFFEBF7EE), Color(0xFF1F6A30)),
+    AMBRA("ambra", Color(0xFFB7791F), Color(0xFFFBF3E3), Color(0xFF8A5A12)),
+    VIOLA("viola", Color(0xFF7048E8), Color(0xFFF1ECFE), Color(0xFF5532C9)),
+    GRIGIO("grigio", Color(0xFF868E96), Color(0xFFF1F3F5), Color(0xFF495057)),
+    ARDESIA("ardesia", Color(0xFF495057), Color(0xFFEEF0F2), Color(0xFF343A40)),
+    PETROLIO("petrolio", Color(0xFF0B7285), Color(0xFFE3F2F4), Color(0xFF0A5866)),
+    ROSA("rosa", Color(0xFFD6336C), Color(0xFFFCEBF1), Color(0xFFA61E4D)),
+    INDACO("indaco", Color(0xFF4263EB), Color(0xFFECF0FE), Color(0xFF364FC7)),
+    OLIVA("oliva", Color(0xFF5C940D), Color(0xFFF0F7E6), Color(0xFF466F0A)),
+    MARRONE("marrone", Color(0xFFA0522D), Color(0xFFF7EDE7), Color(0xFF7A3E1F)),
+    CIANO("ciano", Color(0xFF1098AD), Color(0xFFE3F6F9), Color(0xFF0C6B7A)),
     ;
 
-    /** Lo sfondo dell'etichetta del gruppo nel tema in uso. */
+    /** Nel tema scuro il tenue è il colore al 20% sulla superficie scura (§1). */
+    val tenueScuro: Color get() = lerp(SUPERFICIE_SCURA, pieno, 0.2f)
+
+    /** Nel tema scuro le iniziali sono una tinta chiara del colore. */
+    val inchiostroScuro: Color get() = lerp(pieno, Color.White, 0.6f)
+
+    /** Sfondo del cerchio con le iniziali e della pillola, nel tema in uso. */
     val fondo: Color
         @Composable @ReadOnlyComposable
-        get() = if (LocalTemaScuro.current) scuroFondo else chiaroFondo
+        get() = if (LocalTemaScuro.current) tenueScuro else tenue
 
-    /** Il testo dell'etichetta del gruppo nel tema in uso. */
+    /** Le iniziali e il testo della pillola, nel tema in uso. */
     val testo: Color
         @Composable @ReadOnlyComposable
-        get() = if (LocalTemaScuro.current) scuroTesto else chiaroTesto
+        get() = if (LocalTemaScuro.current) inchiostroScuro else inchiostro
 
-    /**
-     * Il pallino del gruppo (schede, foglio "Sposta in"): la tinta piena nel tema
-     * chiaro; nel tema scuro quella dell'etichetta, che sul fondo scuro si vede.
-     */
+    /** Il pallino della sezione: pieno; al buio un poco più chiaro, che si veda. */
     val punto: Color
         @Composable @ReadOnlyComposable
-        get() = if (LocalTemaScuro.current) scuroTesto else base
+        get() = if (LocalTemaScuro.current) lerp(pieno, Color.White, 0.25f) else pieno
 
     companion object {
+        private val SUPERFICIE_SCURA = Color(0xFF1C1C1F)
+
         /** Un nome che l'app non conosce (o nessun nome: server vecchio) diventa ardesia. */
         fun daNome(nome: String?): ColoreGruppo {
             val pulito = nome?.trim()?.lowercase() ?: return ARDESIA

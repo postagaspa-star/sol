@@ -108,6 +108,8 @@ data class Gruppo(
     val descrizione: String? = null,
     /** 17: il NOME del colore (blu, verde, ...); l'app lo traduce coi colori della guida. */
     val colore: String? = null,
+    /** 18.2: nella Posta "Importanti" è una riga sola chiusa (Newsletter, fatture...). */
+    val raccolta: Boolean = false,
 ) {
     companion object {
         /** Il decisore sceglie tra 2 e 16 opzioni (15.1). */
@@ -404,10 +406,61 @@ data class ImpostazioniSol(
     val conservaGiorni: Int = 180,
     /** 16.2: da questa probabilità in su una mail è "possibile truffa" (tra 0,2 e 0,9). */
     val sogliaTruffa: Double = 0.5,
+    /** 18.3: come salutare nella pagina Oggi; vuoto = solo "Buongiorno". */
+    val nome: String = "",
 ) {
     companion object {
         const val SOGLIA_TRUFFA_MINIMA = 0.2
         const val SOGLIA_TRUFFA_MASSIMA = 0.9
+    }
+}
+
+// --- Oggi (18.1) ------------------------------------------------------------------
+
+/** La pagina Oggi in una chiamata: il punto della giornata e cosa fare. */
+@Serializable
+data class Oggi(
+    val data: String? = null,
+    val nome: String = "",
+    val mailOggi: Int = 0,
+    val riassunto: Riassunto? = null,
+    val scadenzaProssima: Scadenza? = null,
+    val daFare: List<VoceOggi> = emptyList(),
+    val fatteOggi: Int = 0,
+    val totaleOggi: Int = 0,
+)
+
+/**
+ * Una voce di "Da fare". I campi dipendono da [tipo] (truffa, risposta, smista,
+ * rispondi, sollecito, scadenza): le frasi le compone l'app.
+ */
+@Serializable
+data class VoceOggi(
+    val tipo: String,
+    val mailId: Long? = null,
+    val bozzaId: Long? = null,
+    val mittente: String? = null,
+    val oggetto: String? = null,
+    val riassunto: String? = null,
+    val urgenza: String? = null,
+    val colore: String? = null,
+    val iniziali: String? = null,
+    val conteggio: Int = 0,
+    val inviataId: Long? = null,
+    val a: String? = null,
+    val nome: String? = null,
+    val giorni: Int = 0,
+    val scadenzaId: Long? = null,
+    val descrizione: String? = null,
+    val quando: String? = null,
+) {
+    companion object {
+        const val TRUFFA = "truffa"
+        const val RISPOSTA = "risposta"
+        const val SMISTA = "smista"
+        const val RISPONDI = "rispondi"
+        const val SOLLECITO = "sollecito"
+        const val SCADENZA = "scadenza"
     }
 }
 
@@ -430,7 +483,11 @@ data class BozzaNuova(val id: Long, val mailId: Long? = null, val oggetto: Strin
 // --- Conteggi (15.4) e arretrato (15.2) -------------------------------------------------
 
 @Serializable
-data class ConteggioGruppo(val daLeggere: Int = 0, val totale: Int = 0)
+data class ConteggioGruppo(val daLeggere: Int = 0, val totale: Int = 0, val ultima: UltimaMail? = null)
+
+/** 18.2: l'ultima mail di un gruppo, per la riga chiusa di una raccolta. */
+@Serializable
+data class UltimaMail(val mittente: String? = null, val oggetto: String = "", val ricevutaIl: String? = null)
 
 @Serializable
 data class Conteggi(

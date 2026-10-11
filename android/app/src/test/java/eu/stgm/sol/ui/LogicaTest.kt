@@ -16,15 +16,27 @@ class LogicaTest {
     private val oggi = LocalDate.of(2026, 10, 10)
 
     @Test
-    fun `indietro chiude le pagine, poi torna alla posta, poi esce`() {
-        val n = Navigazione(Scheda.SCADENZE).apri(Pagina.Mail(812)).apri(Pagina.Bozza(55))
+    fun `indietro chiude le pagine, poi torna a Oggi, poi esce`() {
+        val n = Navigazione(Scheda.RIASSUNTI).apri(Pagina.Mail(812)).apri(Pagina.Bozza(55))
         assertEquals(Pagina.Bozza(55), n.inCima)
         val uno = n.indietro()!!
         assertEquals(Pagina.Mail(812), uno.inCima)
         val due = uno.indietro()!!
-        assertEquals(Navigazione(Scheda.SCADENZE), due)
-        assertEquals(Navigazione(Scheda.POSTA), due.indietro())
+        assertEquals(Navigazione(Scheda.RIASSUNTI), due)
+        assertEquals(Navigazione(Scheda.OGGI), due.indietro())
         assertNull(Navigazione().indietro())
+    }
+
+    @Test
+    fun `si parte da Oggi e la barra ha tre voci`() {
+        assertEquals(Scheda.OGGI, Navigazione().scheda)
+        assertEquals(listOf("Oggi", "Posta", "Riassunti"), Scheda.entries.map { it.etichetta })
+    }
+
+    @Test
+    fun `scegliere una voce della barra chiude le pagine aperte`() {
+        val n = Navigazione().apri(Pagina.Scadenze).apri(Pagina.Mail(3))
+        assertEquals(Navigazione(Scheda.POSTA), n.scegli(Scheda.POSTA))
     }
 
     @Test
@@ -35,7 +47,13 @@ class LogicaTest {
 
     @Test
     fun `la navigazione sopravvive come testo`() {
-        val n = Navigazione(Scheda.INDIETRO, listOf(Pagina.Bozza(9), Pagina.Mail(812), Pagina.Impostazioni, Pagina.Abbinamento))
+        val n = Navigazione(
+            Scheda.POSTA,
+            listOf(
+                Pagina.Bozza(9), Pagina.Mail(812), Pagina.Raccolta(4), Pagina.Impostazioni, Pagina.Abbinamento,
+                Pagina.Smista, Pagina.Ricerca, Pagina.Scadenze, Pagina.AspettiRisposta, Pagina.Tutorial,
+            ),
+        )
         assertEquals(n, Navigazione.decodifica(n.codifica()))
         assertEquals(Navigazione(), Navigazione.decodifica(null))
         assertEquals(Navigazione(), Navigazione.decodifica("ROTTO|mail:x"))
@@ -68,16 +86,18 @@ class LogicaTest {
     }
 
     @Test
-    fun `Da - solo l'indirizzo, il nome sta gia nell'intestazione`() {
-        assertEquals("Da: rossi@esempio.it", rigaDa(Indirizzo("Mario Rossi", "rossi@esempio.it")))
-        assertEquals("Da: rossi@esempio.it", rigaDa(Indirizzo("", "rossi@esempio.it")))
-        assertEquals("Da: rossi@esempio.it", rigaDa(Indirizzo(null, "rossi@esempio.it")))
+    fun `sotto il nome - l'indirizzo, che tradisce le truffe`() {
+        assertEquals("rossi@esempio.it", rigaDa(Indirizzo("Mario Rossi", "rossi@esempio.it")))
+        assertEquals("rossi@esempio.it", rigaDa(Indirizzo("", "rossi@esempio.it")))
+        assertEquals("rossi@esempio.it", rigaDa(Indirizzo(null, "rossi@esempio.it")))
         assertEquals(
             "l'indirizzo che tradisce la truffa resta in vista",
-            "Da: bianchi.amministrazione@esempio-pagamenti.it",
+            "bianchi.amministrazione@esempio-pagamenti.it",
             rigaDa(Indirizzo("Luca Bianchi", "bianchi.amministrazione@esempio-pagamenti.it")),
         )
-        assertEquals("senza indirizzo, il nome", "Da: Mario Rossi", rigaDa(Indirizzo("Mario Rossi", "")))
+        assertEquals("senza indirizzo, il nome", "Mario Rossi", rigaDa(Indirizzo("Mario Rossi", "")))
+        assertEquals("con l'ora", "rossi@esempio.it · 2 ott 2025", rigaDa(Indirizzo("Mario Rossi", "rossi@esempio.it"), "2025-10-02T10:00:00+02:00"))
+        assertEquals("senza nome l'indirizzo è già il titolo", "2 ott 2025", rigaDa(Indirizzo("", "rossi@esempio.it"), "2025-10-02T10:00:00+02:00"))
     }
 
     @Test

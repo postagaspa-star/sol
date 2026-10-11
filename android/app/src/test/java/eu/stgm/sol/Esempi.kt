@@ -110,4 +110,22 @@ object Esempi {
       "attiva_dal": "2026-10-10T08:00:00+02:00"}"""
 
     const val VERSIONE = """{"server": "1.0.0", "android": {"codice": 1, "nome": "1.0.0"}, "pc": {"codice": 1, "nome": "1.0.0"}, "nota": "prima versione"}"""
+
+    /** 18.1: la pagina Oggi, una voce per tipo, nell'ordine del contratto. */
+    const val OGGI = """{
+      "data": "2026-10-11", "nome": "Manuel", "mail_oggi": 14,
+      "riassunto": {"id": 30, "tipo": "giornaliero", "richiesta": null, "stato": "pronto",
+        "testo": "Rossi aspetta l'offerta del capannone [#812]. Bianchi ha mandato la fattura di ottobre.",
+        "mail_citate": [812], "creato_il": "2026-10-11T07:00:00+02:00", "aggiornato_il": "2026-10-11T07:00:00+02:00"},
+      "scadenza_prossima": {"id": 4, "descrizione": "Offerta a Rossi", "quando": "2026-10-16", "mail_id": 812},
+      "da_fare": [
+        {"tipo": "truffa", "mail_id": 820, "mittente": "Ferramenta Neri", "oggetto": "Nuovo IBAN", "riassunto": "Chiede di pagare su un IBAN nuovo", "colore": "verde", "iniziali": "FN"},
+        {"tipo": "risposta", "mail_id": 812, "bozza_id": 55, "mittente": "Mario Rossi", "oggetto": "Offerta capannone Bassano", "riassunto": "Chiede l'offerta entro venerdì", "urgenza": "alta", "colore": "blu", "iniziali": "MR"},
+        {"tipo": "smista", "conteggio": 3},
+        {"tipo": "rispondi", "mail_id": 815, "mittente": "Luca Bianchi", "oggetto": "Fattura ottobre", "riassunto": "Chiede conferma del pagamento", "colore": "ambra", "iniziali": "LB"},
+        {"tipo": "sollecito", "inviata_id": 77, "bozza_id": null, "a": "neri@esempio.it", "nome": "Anna Neri", "oggetto": "Offerta compressore", "giorni": 8, "iniziali": "AN"},
+        {"tipo": "scadenza", "scadenza_id": 4, "descrizione": "Offerta a Rossi", "quando": "2026-10-16", "mail_id": 812}
+      ],
+      "fatte_oggi": 2, "totale_oggi": 10
+    }"""
 }

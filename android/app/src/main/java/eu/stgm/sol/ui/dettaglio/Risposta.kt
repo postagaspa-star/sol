@@ -1,37 +1,36 @@
 package eu.stgm.sol.ui.dettaglio
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,9 +41,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -54,54 +58,63 @@ import androidx.compose.ui.unit.dp
 import eu.stgm.sol.LocalMessaggi
 import eu.stgm.sol.dati.Bozza
 import eu.stgm.sol.dati.Mail
-import eu.stgm.sol.ui.ALTEZZA_TOCCO
 import eu.stgm.sol.ui.CampiBozza
 import eu.stgm.sol.ui.DialogoConferma
+import eu.stgm.sol.ui.FoglioSol
 import eu.stgm.sol.ui.GestoreBozza
-import eu.stgm.sol.ui.PulsantePieno
+import eu.stgm.sol.ui.Icone
+import eu.stgm.sol.ui.MARGINE
+import eu.stgm.sol.ui.PulsanteGrande
+import eu.stgm.sol.ui.PulsanteGrandeBianco
 import eu.stgm.sol.ui.PulsanteTesto
-import eu.stgm.sol.ui.PulsanteVuoto
 import eu.stgm.sol.ui.RichiestaConferma
 import eu.stgm.sol.ui.Riquadro
 import eu.stgm.sol.ui.RiquadroTruffa
 import eu.stgm.sol.ui.StatoBozza
-import eu.stgm.sol.ui.Superficie
+import eu.stgm.sol.ui.ombra
 import eu.stgm.sol.ui.quandoCompleto
-import eu.stgm.sol.ui.tema.LocalSegni
+import eu.stgm.sol.ui.tema.LocalMovimenti
+import eu.stgm.sol.ui.tema.Sol
 import eu.stgm.sol.ui.tema.morbido
-
-/** Riga d'aiuto sotto i campi in cui si scrive a Sol. */
-const val AIUTO_DETTATURA = "Puoi anche dettare col microfono della tastiera."
 
 /** L'avviso della conferma quando a quella mail si è già risposto da un altro programma (15.13). */
 const val AVVISO_GIA_RISPOSTO = "Hai già risposto a questa mail da un altro programma: vuoi mandare anche questa?"
 
-private const val TITOLO_RISPOSTA = "Risposta pronta"
-
 /** L'avviso in più della conferma per le risposte a una mail segnalata (16.3). */
 const val AVVISO_TRUFFA_INVIO = "Stai rispondendo a una mail segnalata come possibile truffa."
 
-/** La barra fissa in basso della mail aperta (docs/aspetto.md §3). */
+/**
+ * Le pillole di tono sotto la risposta di Sol (§5): ognuna rifà la risposta con la
+ * sua istruzione, partendo da quella di adesso.
+ */
+enum class Tono(val etichetta: String, val istruzione: String) {
+    BREVE("Più breve", "Rendila più breve: tieni solo l'essenziale."),
+    FORMALE("Più formale", "Rendila più formale, dando del lei."),
+    TEMPO("Chiedi più tempo", "Chiedi con garbo qualche giorno in più prima di dare una risposta completa."),
+}
+
+/** La barra fissa in basso della mail aperta (§5). */
 sealed interface Barra {
     data object Nessuna : Barra
 
-    /** Nessuna risposta, ma la mail va risposta: [Prepara la risposta]. */
+    /** Nessuna risposta, ma la mail va risposta: "Prepara la risposta". */
     data object Prepara : Barra
 
-    /** "Sol sta scrivendo la risposta…" con l'indicatore. */
+    /** Sol sta scrivendo: il pulsante c'è ma è spento. */
     data object Scrivendo : Barra
 
-    /** Un controllo in corso al posto dei pulsanti ("Rileggo la risposta...", "Controllo se è partita..."). */
+    /** Un controllo in corso al posto dell'invio ("Rileggo la risposta...", "Controllo se è partita..."). */
     data class Attesa(val testo: String) : Barra
 
-    /** Con una risposta pronta: [Rifai] [Invia →]. */
-    data class RifaiInvia(val invioAttivo: Boolean, val rifaiAttivo: Boolean) : Barra
+    /** Con una risposta pronta: "Invia risposta". */
+    data class Invia(val attivo: Boolean) : Barra
 }
 
 /**
  * Quale barra mostrare. [mail] null: un sollecito, che non risponde a una mail
  * ricevuta. Una mail sospetta senza risposta chiesta non ha barra: il gesto giusto
- * è "Non è una truffa", nell'avviso.
+ * è "Non è una truffa", nell'avviso. Una mail che non chiede risposta neppure: si
+ * risponde dal menu.
  */
 fun barraPer(mail: Mail?, stato: StatoBozza): Barra {
     val bozza = stato.bozza
@@ -111,251 +124,309 @@ fun barraPer(mail: Mail?, stato: StatoBozza): Barra {
         return when {
             stato.verificaInvio -> Barra.Attesa("Controllo se è partita...")
             stato.preparazioneConferma -> Barra.Attesa("Rileggo la risposta...")
-            else -> Barra.RifaiInvia(
-                invioAttivo = !stato.campiBloccati && stato.campiVisibili?.testo?.isNotBlank() == true,
-                rifaiAttivo = !stato.campiBloccati,
-            )
+            else -> Barra.Invia(attivo = !stato.campiBloccati && stato.campiVisibili?.testo?.isNotBlank() == true)
         }
     }
     if (mail == null || mail.sospetta || mail.rispostaData || bozza?.stato == Bozza.INVIATA) return Barra.Nessuna
     return if (mail.daRispondere) Barra.Prepara else Barra.Nessuna
 }
 
+/** La barra in basso: un pulsante pieno alto 56, tutta larghezza, su una sfumatura del fondo. */
 @Composable
-fun BarraRisposta(barra: Barra, onRifai: () -> Unit, onInvia: () -> Unit, onPrepara: () -> Unit) {
+fun BarraRisposta(barra: Barra, onInvia: () -> Unit, onPrepara: () -> Unit, modifier: Modifier = Modifier, testoInvia: String = "Invia risposta") {
     if (barra == Barra.Nessuna) return
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shadowElevation = 6.dp) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = ALTEZZA_TOCCO + 20.dp).padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                when (barra) {
-                    Barra.Prepara -> PulsantePieno("Prepara la risposta", onPrepara, Modifier.fillMaxWidth())
-                    Barra.Scrivendo -> InAttesa("Sol sta scrivendo la risposta…")
-                    is Barra.Attesa -> InAttesa(barra.testo)
-                    is Barra.RifaiInvia -> {
-                        PulsanteVuoto("Rifai", onRifai, Modifier.weight(1f), abilitato = barra.rifaiAttivo)
-                        Spacer(Modifier.width(12.dp))
-                        PulsantePieno(
-                            "Invia",
-                            onInvia,
-                            Modifier.weight(1.6f),
-                            abilitato = barra.invioAttivo,
-                            icona = Icons.AutoMirrored.Filled.ArrowForward,
-                        )
-                    }
-                    Barra.Nessuna -> Unit
-                }
-            }
+    val fondo = Sol.colori.fondo
+    Box(
+        modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(0f to fondo.copy(alpha = 0f), 0.3f to fondo))
+            .navigationBarsPadding()
+            .padding(start = MARGINE, end = MARGINE, top = 12.dp, bottom = 22.dp),
+    ) {
+        when (barra) {
+            Barra.Prepara -> PulsanteGrande("Prepara la risposta", onPrepara, Modifier.fillMaxWidth())
+            Barra.Scrivendo -> PulsanteGrande("Sol sta scrivendo…", {}, Modifier.fillMaxWidth(), abilitato = false)
+            is Barra.Attesa -> PulsanteGrande(barra.testo, {}, Modifier.fillMaxWidth(), abilitato = false)
+            is Barra.Invia -> PulsanteGrande(testoInvia, onInvia, Modifier.fillMaxWidth(), icona = Icone.Invia, abilitato = barra.attivo)
+            Barra.Nessuna -> Unit
         }
     }
 }
 
-@Composable
-private fun InAttesa(testo: String) {
-    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
-    Text(testo, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 14.dp))
-}
-
 /**
- * La risposta sotto la mail (o il sollecito da solo): si scrive direttamente qui,
- * A e Oggetto si aprono al tocco. Le garanzie dell'invio stanno in [GestoreBozza] e
- * sono quelle di sempre: durante conferma e invio i campi sono bloccati.
+ * La risposta di Sol (§5): una scheda bianca in rilievo col sole, "a {destinatario}"
+ * (toccando si aprono A, Cc e Oggetto), il testo da scrivere direttamente e le
+ * pillole di tono. Le garanzie dell'invio stanno in [GestoreBozza], uguali a prima.
  */
 @Composable
-fun RiquadroRisposta(
+fun RispostaDiSol(
     gestore: GestoreBozza,
     stato: StatoBozza,
     giaRisposto: Boolean,
+    onTono: (String?) -> Unit,
     modifier: Modifier = Modifier,
-    titolo: String = TITOLO_RISPOSTA,
+    titolo: String = "Risposta di Sol",
 ) {
     val bozza = stato.bozza
     // Il segno di spunta compare solo se la risposta parte mentre la si guarda.
     val apertaAllInizio = remember(bozza?.id) { bozza != null && !bozza.chiusa }
-    Column(modifier.fillMaxWidth().animateContentSize(morbido())) {
+    // Mentre Sol riscrive il testo resta in vista, sbiadito.
+    var ultimoTesto by remember(bozza?.id) { mutableStateOf("") }
+    val rifacendo = stato.richiestaRisposta || stato.inAttesa || bozza?.inPreparazione == true
+    // L'ultima pillola toccata resta evidenziata: si vede che tono si è chiesto.
+    var tonoScelto by rememberSaveable(bozza?.id) { mutableStateOf<String?>(null) }
+    val conTono: (String?) -> Unit = {
+        tonoScelto = it
+        onTono(it)
+    }
+    if (bozza != null && !bozza.inPreparazione && bozza.testo.isNotBlank()) ultimoTesto = bozza.testo
+    // Niente animateContentSize qui: taglierebbe l'ombra della scheda.
+    Column(modifier.fillMaxWidth()) {
         stato.errore?.let {
-            Riquadro(it, grave = true, azione = "Chiudi", onAzione = gestore::consumaErrore, modifier = Modifier.padding(bottom = 8.dp))
+            Riquadro(it, grave = true, azione = "Chiudi", onAzione = gestore::consumaErrore, modifier = Modifier.padding(bottom = 10.dp))
         }
         when {
-            stato.caricamento -> Text("Carico la risposta...", style = MaterialTheme.typography.bodyLarge)
-            // Senza risposta, o mentre Sol la scrive, parla la barra in basso.
-            bozza == null || bozza.inPreparazione || stato.richiestaRisposta -> Unit
+            stato.caricamento -> Unit
+            rifacendo -> SchedaRisposta(titolo, destinatari = null, onDestinatari = null) {
+                if (ultimoTesto.isNotBlank()) {
+                    Text(ultimoTesto, style = Sol.testi.testo, color = Sol.colori.testo, modifier = Modifier.alpha(0.4f))
+                } else {
+                    Text("Sol sta scrivendo la risposta…", style = Sol.testi.testo, color = Sol.colori.tenue)
+                }
+                BarraCheScorre()
+            }
+            bozza == null -> Unit
             bozza.stato == Bozza.INVIATA -> RispostaInviata(bozza, conMovimento = apertaAllInizio)
-            bozza.stato == Bozza.SCARTATA -> Text(
-                "La risposta è stata scartata.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            else -> ScriviRisposta(gestore, stato, bozza, giaRisposto, titolo)
+            bozza.stato == Bozza.SCARTATA -> Text("La risposta è stata scartata.", style = Sol.testi.medio, color = Sol.colori.tenue)
+            else -> ScriviRisposta(gestore, stato, bozza, giaRisposto, titolo, tonoScelto, conTono)
         }
+    }
+}
+
+/** La barra sottile che scorre una volta sola mentre Sol riscrive (niente rotelle in loop). */
+@Composable
+private fun BarraCheScorre() {
+    val avanzamento = remember { Animatable(0.05f) }
+    val muove = LocalMovimenti.current
+    LaunchedEffect(Unit) {
+        if (muove) avanzamento.animateTo(0.92f, tween(9_000, easing = FastOutSlowInEasing)) else avanzamento.snapTo(0.6f)
+    }
+    LinearProgressIndicator(
+        progress = { avanzamento.value },
+        modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
+        color = Sol.colori.accento,
+        trackColor = Sol.colori.traccia,
+        gapSize = 0.dp,
+        drawStopIndicator = {},
+    )
+}
+
+/** La scheda bianca in rilievo con l'intestazione "☀ Risposta di Sol · a rossi@esempio.it". */
+@Composable
+internal fun SchedaRisposta(
+    titolo: String,
+    destinatari: String?,
+    onDestinatari: (() -> Unit)?,
+    contenuto: @Composable () -> Unit,
+) {
+    val c = Sol.colori
+    val forma = RoundedCornerShape(24.dp)
+    Column(
+        Modifier.fillMaxWidth().ombra(forma, rilievo = true).background(c.superficie, forma).padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icone.Sole, contentDescription = null, tint = c.accento, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(titolo, style = Sol.testi.secondario, fontWeight = FontWeight.ExtraBold, color = c.accentoTesto, modifier = Modifier.semantics { heading() })
+            Spacer(Modifier.weight(1f))
+            if (destinatari != null) {
+                Text(
+                    "a $destinatari",
+                    style = Sol.testi.piccolo,
+                    color = c.moltoTenue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .then(if (onDestinatari != null) Modifier.clickable(role = Role.Button, onClickLabel = "Cambia destinatari e oggetto", onClick = onDestinatari) else Modifier)
+                        .heightIn(min = 32.dp)
+                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                )
+            }
+        }
+        contenuto()
     }
 }
 
 @Composable
 private fun RispostaInviata(bozza: Bozza, conMovimento: Boolean) {
-    val segni = LocalSegni.current
+    val c = Sol.colori
     val spunta = remember { MutableTransitionState(!conMovimento).apply { targetState = true } }
-    Superficie {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            AnimatedVisibility(visibleState = spunta, enter = scaleIn(morbido()) + fadeIn(morbido())) {
-                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = segni.accentoTesto, modifier = Modifier.size(28.dp))
+    val forma = RoundedCornerShape(24.dp)
+    Row(
+        Modifier.fillMaxWidth().ombra(forma).background(c.superficie, forma).padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AnimatedVisibility(visibleState = spunta, enter = scaleIn(morbido()) + fadeIn(morbido())) {
+            Box(Modifier.size(40.dp).background(c.accentoTenueForte, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
+                Icon(Icone.Spunta, contentDescription = null, tint = c.accento, modifier = Modifier.size(20.dp))
             }
-            Column(Modifier.padding(start = 12.dp)) {
-                Text("Risposta inviata", style = MaterialTheme.typography.titleSmall)
-                quandoCompleto(bozza.inviataIl).takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+        }
+        Column(Modifier.padding(start = 12.dp)) {
+            Text("Risposta inviata", style = Sol.testi.forte, color = c.testo)
+            quandoCompleto(bozza.inviataIl).takeIf { it.isNotBlank() }?.let {
+                Text(it, style = Sol.testi.piccolo, color = c.tenue)
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ScriviRisposta(gestore: GestoreBozza, stato: StatoBozza, bozza: Bozza, giaRisposto: Boolean, titolo: String) {
-    val segni = LocalSegni.current
+private fun ScriviRisposta(
+    gestore: GestoreBozza,
+    stato: StatoBozza,
+    bozza: Bozza,
+    giaRisposto: Boolean,
+    titolo: String,
+    tonoScelto: String?,
+    onTono: (String?) -> Unit,
+) {
+    val c = Sol.colori
     val campi = stato.campiVisibili ?: return
     val abilitato = stato.scrivibile
-    var apriIndirizzi by rememberSaveable(bozza.id) { mutableStateOf(false) }
-    var apriOggetto by rememberSaveable(bozza.id) { mutableStateOf(false) }
+    var apriCampi by rememberSaveable(bozza.id) { mutableStateOf(false) }
+    var altro by rememberSaveable { mutableStateOf(false) }
     val cambia: (CampiBozza) -> Unit = gestore::scrivi
 
     if (giaRisposto) {
         Riquadro(
-            "Hai già risposto a questa mail da un altro programma. Questa bozza parte solo se lo confermi.",
-            modifier = Modifier.padding(bottom = 8.dp),
+            "Hai già risposto a questa mail da un altro programma. Questa risposta parte solo se lo confermi.",
+            modifier = Modifier.padding(bottom = 10.dp),
         )
     }
-    Superficie {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Edit, contentDescription = null, tint = segni.accentoTesto, modifier = Modifier.size(20.dp))
-                // Senza testo non è una risposta "pronta": lo dice il riquadro qui sotto.
-                Text(
-                    if (bozza.senzaTesto && titolo == TITOLO_RISPOSTA) "Risposta" else titolo,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = segni.accentoTesto,
-                    modifier = Modifier.padding(start = 8.dp).weight(1f).semantics { heading() },
-                )
-                if (bozza.modificata) {
-                    Text("modificata da te", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            if (bozza.stato == Bozza.ERRORE && !stato.verificaInvio) {
-                Text(
-                    "L'ultimo invio non è riuscito: ${bozza.errore ?: "motivo non indicato"}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            if (apriIndirizzi) {
-                CampoScritto("A", campi.a, abilitato, KeyboardType.Email, aiuto = "Più indirizzi separati da virgola") {
-                    cambia(campi.copy(a = it))
-                }
-                CampoScritto("Cc", campi.cc, abilitato, KeyboardType.Email) { cambia(campi.copy(cc = it)) }
-            } else {
-                RigaCampo("A", campi.a.ifBlank { "(nessuno)" }, abilitato) { apriIndirizzi = true }
-                if (campi.cc.isNotBlank()) RigaCampo("Cc", campi.cc, abilitato) { apriIndirizzi = true }
-            }
-            if (apriOggetto) {
-                CampoScritto("Oggetto", campi.oggetto, abilitato, KeyboardType.Text) { cambia(campi.copy(oggetto = it)) }
-            } else {
-                RigaCampo("Oggetto", campi.oggetto.ifBlank { "(senza oggetto)" }, abilitato) { apriOggetto = true }
-            }
-            // Sol ha finito ma non ha scritto niente: non è un invio fallito, è una risposta da rifare (o da scrivere qui).
-            if (bozza.senzaTesto && !stato.inModifica) {
-                Riquadro(GestoreBozza.SENZA_TESTO + (bozza.errore?.let { " $it" } ?: ""), modifier = Modifier.padding(top = 8.dp))
-                PulsanteTesto("Riprova a prepararla", { gestore.rifai(null) }, abilitato = abilitato)
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 4.dp))
-            // Il testo si scrive qui, allineato ad A e Oggetto. Bloccato durante conferma e invio, ma sempre leggibile.
-            BasicTextField(
-                value = campi.testo,
-                onValueChange = { cambia(campi.copy(testo = it)) },
-                enabled = abilitato,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp)
-                    .padding(vertical = 8.dp),
-                decorationBox = { campo ->
-                    Box {
-                        if (campi.testo.isEmpty()) {
-                            Text(
-                                "Scrivi qui la risposta",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        campo()
-                    }
-                },
-            )
-            Text(AIUTO_DETTATURA, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (stato.modificheNonSalvate) {
-                Text(
-                    "Modifiche non ancora salvate: restano su questo telefono finché non le salvi o le invii.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PulsanteTesto("Annulla modifiche", gestore::annullaModifica, abilitato = abilitato)
-                    PulsanteTesto("Salva", { gestore.salvaModifica() }, abilitato = abilitato)
-                }
-            }
-        }
-    }
-}
-
-/** A, Cc, Oggetto chiusi: una riga da toccare per cambiarli. */
-@Composable
-private fun RigaCampo(etichetta: String, valore: String, abilitato: Boolean, onApri: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(enabled = abilitato, role = Role.Button, onClickLabel = "Cambia $etichetta", onClick = onApri),
-        verticalAlignment = Alignment.CenterVertically,
+    SchedaRisposta(
+        if (bozza.senzaTesto && titolo == "Risposta di Sol") "Risposta" else titolo,
+        destinatari = campi.a.ifBlank { "(nessuno)" },
+        onDestinatari = if (abilitato) ({ apriCampi = !apriCampi }) else null,
     ) {
-        Text("$etichetta: ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            valore,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (etichetta == "Oggetto") FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (abilitato) {
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (bozza.stato == Bozza.ERRORE && !stato.verificaInvio) {
+            Text(
+                "L'ultimo invio non è riuscito: ${bozza.errore ?: "motivo non indicato"}",
+                style = Sol.testi.secondario,
+                fontWeight = FontWeight.SemiBold,
+                color = c.truffaTesto,
+            )
         }
+        if (apriCampi) {
+            CampoScritto("A", campi.a, abilitato, KeyboardType.Email) { cambia(campi.copy(a = it)) }
+            CampoScritto("Cc", campi.cc, abilitato, KeyboardType.Email) { cambia(campi.copy(cc = it)) }
+            CampoScritto("Oggetto", campi.oggetto, abilitato, KeyboardType.Text) { cambia(campi.copy(oggetto = it)) }
+        }
+        // Sol ha finito ma non ha scritto niente: non è un invio fallito, è una risposta da rifare (o da scrivere qui).
+        if (bozza.senzaTesto && !stato.inModifica) {
+            Riquadro(GestoreBozza.SENZA_TESTO + (bozza.errore?.let { " $it" } ?: ""), azione = "Riprova a prepararla", onAzione = { gestore.rifai(null) })
+        }
+        BasicTextField(
+            value = campi.testo,
+            onValueChange = { cambia(campi.copy(testo = it)) },
+            enabled = abilitato,
+            textStyle = Sol.testi.testo.copy(color = c.testo),
+            cursorBrush = SolidColor(c.accento),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { campo ->
+                Box {
+                    if (campi.testo.isEmpty()) Text("Scrivi qui la risposta", style = Sol.testi.testo, color = c.moltoTenue)
+                    campo()
+                }
+            },
+        )
+        if (stato.modificheNonSalvate) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Modifiche non salvate", style = Sol.testi.piccolo, color = c.tenue, modifier = Modifier.weight(1f))
+                PulsanteTesto("Annulla", gestore::annullaModifica, abilitato = abilitato)
+                PulsanteTesto("Salva", { gestore.salvaModifica() }, abilitato = abilitato)
+            }
+        }
+        // Le pillole sono alte 38 ma si toccano su 48: tra le righe basta lo spazio del tocco.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Tono.entries.forEach { tono ->
+                PillolaTono(tono.etichetta, scelta = tonoScelto == tono.istruzione, abilitata = abilitato) { onTono(tono.istruzione) }
+            }
+            PillolaTono("Altro…", scelta = altro, abilitata = abilitato) { altro = true }
+        }
+    }
+    if (altro) {
+        FoglioAltro(onRifai = { istruzioni ->
+            altro = false
+            onTono(istruzioni)
+        }, onAnnulla = { altro = false })
+    }
+}
+
+/** Una pillola di tono: alta 38, bordo sottile; scelta = accento tenue. */
+@Composable
+internal fun PillolaTono(testo: String, scelta: Boolean, abilitata: Boolean, onClick: () -> Unit) {
+    val c = Sol.colori
+    val forma = RoundedCornerShape(999.dp)
+    Box(
+        Modifier
+            .heightIn(min = 48.dp)
+            .clip(forma)
+            .clickable(enabled = abilitata, role = Role.Button, onClick = onClick)
+            .semantics { selected = scelta },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            testo,
+            style = Sol.testi.secondario,
+            fontWeight = FontWeight.Bold,
+            color = if (scelta) c.accentoTestoForte else c.testoMedio,
+            modifier = Modifier
+                .height(38.dp)
+                .background(if (scelta) c.accentoTenueForte else c.superficie, forma)
+                .border(1.5.dp, if (scelta) c.bordoScelto else c.traccia, forma)
+                .alpha(if (abilitata) 1f else 0.5f)
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+        )
     }
 }
 
 @Composable
-private fun CampoScritto(
-    etichetta: String,
-    valore: String,
-    abilitato: Boolean,
-    tastiera: KeyboardType,
-    aiuto: String? = null,
-    onCambia: (String) -> Unit,
-) {
+private fun CampoScritto(etichetta: String, valore: String, abilitato: Boolean, tastiera: KeyboardType, onCambia: (String) -> Unit) {
     OutlinedTextField(
         value = valore,
         onValueChange = onCambia,
         label = { Text(etichetta) },
-        supportingText = aiuto?.let { { Text(it) } },
         keyboardOptions = KeyboardOptions(keyboardType = tastiera),
         enabled = abilitato,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Sol.colori.accento, unfocusedBorderColor = Sol.colori.traccia),
+        modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/** "Altro…": come rifarla, a parole (o dettata). Vuoto = Sol la riscrive come crede. */
+@Composable
+private fun FoglioAltro(onRifai: (String?) -> Unit, onAnnulla: () -> Unit) {
+    var istruzioni by rememberSaveable { mutableStateOf("") }
+    FoglioSol(onChiudi = onAnnulla, titolo = "Come la vuoi?") {
+        OutlinedTextField(
+            value = istruzioni,
+            onValueChange = { istruzioni = it },
+            placeholder = { Text("Esempio: digli che giovedì va bene") },
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Sol.colori.accento, unfocusedBorderColor = Sol.colori.traccia),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Come rifare la risposta" },
+            minLines = 3,
+        )
+        Spacer(Modifier.height(16.dp))
+        PulsanteGrande("Rifai la risposta", { onRifai(istruzioni.trim().ifEmpty { null }) }, Modifier.fillMaxWidth())
+    }
 }
 
 /** I messaggi brevi e le finestre della risposta (rifare da zero, conferma d'invio). */
@@ -373,7 +444,7 @@ fun FinestreRisposta(gestore: GestoreBozza, stato: StatoBozza) {
         DialogoConferma(
             titolo = "Rifarla da zero?",
             testo = "Le tue modifiche vanno perse e Sol riscrive la risposta da capo. " +
-                "Se vuoi tenerle, scrivi invece cosa cambiare (per esempio «più breve»).",
+                "Se vuoi tenerle, scegli invece un tono (per esempio «Più breve»).",
             conferma = "Rifalla da zero",
             onConferma = gestore::confermaDaZero,
             onAnnulla = gestore::annullaDaZero,
@@ -381,83 +452,52 @@ fun FinestreRisposta(gestore: GestoreBozza, stato: StatoBozza) {
         )
     }
     stato.confermaInvio?.let { richiesta ->
-        DialogoInvio(richiesta, onConferma = gestore::confermaInvio, onAnnulla = gestore::annullaInvio)
+        FoglioInvio(richiesta, onConferma = gestore::confermaInvio, onAnnulla = gestore::annullaInvio)
     }
 }
 
-/** "Rifai": cosa cambiare, a parole (o dettato). Vuoto = Sol la riscrive come crede. */
-@Composable
-fun DialogoRifai(onRifai: (String?) -> Unit, onAnnulla: () -> Unit) {
-    var istruzioni by rememberSaveable { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onAnnulla,
-        title = { Text("Rifai la risposta") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    "Scrivi cosa cambiare: Sol parte dalla risposta di adesso, modifiche tue comprese.",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                OutlinedTextField(
-                    value = istruzioni,
-                    onValueChange = { istruzioni = it },
-                    placeholder = { Text("Esempio: digli che giovedì va bene") },
-                    supportingText = { Text(AIUTO_DETTATURA) },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    minLines = 3,
-                )
-            }
-        },
-        confirmButton = { PulsantePieno("Rifai", onClick = { onRifai(istruzioni.trim().ifEmpty { null }) }) },
-        dismissButton = { PulsanteTesto("Annulla", onAnnulla) },
-    )
-}
-
 /**
- * La conferma esplicita: chi riceve, cosa, come comincia, e che parte davvero.
- * Tutto viene dalla bozza appena riletta: è quella versione che parte (15.11).
+ * La conferma esplicita, in un foglio dal basso (§5): chi riceve, cosa, come comincia,
+ * e che parte davvero. Tutto viene dalla bozza appena riletta: è quella versione che
+ * parte (15.11).
  */
 @Composable
-fun DialogoInvio(richiesta: RichiestaConferma, onConferma: () -> Unit, onAnnulla: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onAnnulla,
-        title = { Text(if (richiesta.cambiata) "La risposta è cambiata" else "Inviare questa mail?") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (richiesta.cambiata) {
-                    Riquadro("È cambiata dopo che l'hai controllata: ricontrollala prima di inviarla.", grave = true)
-                }
-                if (richiesta.sospetta) RiquadroTruffa(AVVISO_TRUFFA_INVIO)
-                if (richiesta.giaRisposto) Riquadro(AVVISO_GIA_RISPOSTO, grave = true)
-                Text("A: ${richiesta.a.joinToString(", ")}", style = MaterialTheme.typography.bodyLarge)
-                if (richiesta.cc.isNotEmpty()) {
-                    Text("Cc: ${richiesta.cc.joinToString(", ")}", style = MaterialTheme.typography.bodyLarge)
-                }
-                Text(
-                    "Oggetto: ${richiesta.oggetto.ifBlank { "(senza oggetto)" }}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text("Comincia così: «${richiesta.primaRiga}»", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "La mail parte subito e non si può ritirare.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+fun FoglioInvio(richiesta: RichiestaConferma, onConferma: () -> Unit, onAnnulla: () -> Unit) {
+    val c = Sol.colori
+    val t = Sol.testi
+    FoglioSol(onChiudi = onAnnulla, titolo = if (richiesta.cambiata) "La risposta è cambiata" else "Inviare questa mail?") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (richiesta.cambiata) {
+                Riquadro("È cambiata dopo che l'hai controllata: ricontrollala prima di inviarla.", grave = true)
             }
-        },
-        confirmButton = {
-            PulsantePieno(
+            if (richiesta.sospetta) RiquadroTruffa(AVVISO_TRUFFA_INVIO)
+            if (richiesta.giaRisposto) Riquadro(AVVISO_GIA_RISPOSTO, grave = true)
+            RigaConferma("A", richiesta.a.joinToString(", "))
+            if (richiesta.cc.isNotEmpty()) RigaConferma("Cc", richiesta.cc.joinToString(", "))
+            RigaConferma("Oggetto", richiesta.oggetto.ifBlank { "(senza oggetto)" })
+            RigaConferma("Comincia così", "«${richiesta.primaRiga}»")
+            Text("La mail parte subito e non si può ritirare.", style = t.secondario, color = c.tenue, modifier = Modifier.padding(top = 4.dp))
+        }
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PulsanteGrandeBianco("Annulla", onAnnulla, Modifier.weight(1f))
+            PulsanteGrande(
                 when {
                     richiesta.sospetta -> "Invia lo stesso"
                     richiesta.giaRisposto -> "Manda anche questa"
-                    else -> "Invia adesso"
+                    else -> "Invia"
                 },
                 onConferma,
+                Modifier.weight(1.3f),
             )
-        },
-        dismissButton = { PulsanteTesto("Annulla", onAnnulla) },
-    )
+        }
+    }
+}
+
+@Composable
+private fun RigaConferma(etichetta: String, valore: String) {
+    Column {
+        Text(etichetta, style = Sol.testi.piccolo, fontWeight = FontWeight.SemiBold, color = Sol.colori.tenue)
+        Text(valore, style = Sol.testi.testo, fontWeight = FontWeight.SemiBold, color = Sol.colori.testo)
+    }
 }

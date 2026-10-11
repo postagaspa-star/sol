@@ -6,7 +6,6 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 
@@ -32,20 +31,50 @@ fun pezziRiassunto(testo: String): List<Pezzo> {
     return pezzi
 }
 
-/** Come si legge un riferimento nel testo: corto, chiaro che si tocca, senza numeri. */
-const val ETICHETTA_RIFERIMENTO = "[apri la mail]"
+/** Quando prima del riferimento non c'è una frase da toccare (due riferimenti attaccati). */
+const val ETICHETTA_RIFERIMENTO = "apri la mail"
 
-/** Il testo con i riferimenti cliccabili: ogni tocco chiama [apri] con l'id della mail. */
+private val FINE_FRASE = Regex("""[.!?;:]\s""")
+
+/**
+ * Il testo con i riferimenti toccabili (docs/aspetto.md §3): il segno `[#812]` non si
+ * vede, si tocca la frase che lo precede, sottolineata leggera nello stesso colore
+ * del testo. Ogni tocco chiama [apri] con l'id della mail.
+ */
 fun testoConRiferimenti(testo: String, colore: Color, apri: (Long) -> Unit): AnnotatedString = buildAnnotatedString {
-    val stile = TextLinkStyles(
-        style = SpanStyle(color = colore, fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline),
-    )
+    val stile = TextLinkStyles(style = SpanStyle(color = colore, textDecoration = TextDecoration.Underline))
+    var inSospeso = ""
+    var ultimo: Char? = null
+    fun scrivi(pezzo: String) {
+        append(pezzo)
+        pezzo.lastOrNull()?.let { ultimo = it }
+    }
+    fun collega(frase: String, id: Long) =
+        withLink(LinkAnnotation.Clickable(tag = "mail:$id", styles = stile) { apri(id) }) { scrivi(frase) }
     pezziRiassunto(testo).forEach { pezzo ->
         when (pezzo) {
-            is Pezzo.Testo -> append(pezzo.testo)
-            is Pezzo.Riferimento -> withLink(
-                LinkAnnotation.Clickable(tag = "mail:${pezzo.mailId}", styles = stile) { apri(pezzo.mailId) },
-            ) { append(ETICHETTA_RIFERIMENTO) }
+            is Pezzo.Testo -> {
+                scrivi(inSospeso)
+                inSospeso = pezzo.testo
+            }
+            is Pezzo.Riferimento -> {
+                // La frase da toccare: dall'ultimo punto (o dall'inizio) fino al segno.
+                val fine = FINE_FRASE.findAll(inSospeso).lastOrNull()?.range?.last?.plus(1) ?: 0
+                val frase = inSospeso.substring(fine).trimEnd()
+                // Spazi e punteggiatura iniziali (", Bianchi...") restano fuori dal collegamento.
+                val parole = frase.indexOfFirst { it.isLetterOrDigit() }.let { if (it < 0) frase.length else it }
+                scrivi(inSospeso.substring(0, fine) + frase.substring(0, parole))
+                val etichetta = frase.substring(parole)
+                if (etichetta.isEmpty()) {
+                    // Due riferimenti attaccati: il secondo ha la sua etichetta, staccata dal primo.
+                    if (ultimo != null && ultimo?.isWhitespace() == false) scrivi(" ")
+                    collega(ETICHETTA_RIFERIMENTO, pezzo.mailId)
+                } else {
+                    collega(etichetta, pezzo.mailId)
+                }
+                inSospeso = ""
+            }
         }
     }
+    scrivi(inSospeso)
 }

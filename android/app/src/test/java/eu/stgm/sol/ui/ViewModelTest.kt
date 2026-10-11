@@ -17,7 +17,6 @@ import eu.stgm.sol.ui.dettaglio.DettaglioViewModel
 import eu.stgm.sol.ui.impostazioni.ImpostazioniViewModel
 import eu.stgm.sol.ui.indietro.IndietroViewModel
 import eu.stgm.sol.ui.posta.PostaViewModel
-import eu.stgm.sol.ui.posta.VoceDaFare
 import eu.stgm.sol.ui.riassunti.RiassuntiViewModel
 import eu.stgm.sol.ui.scadenze.ScadenzeViewModel
 import eu.stgm.sol.ui.scadenze.leggiOra
@@ -95,7 +94,7 @@ class ViewModelTest {
     }
 
     @Test
-    fun `posta - i numeri dei gruppi e del riquadro Da fare vengono da conteggi`() {
+    fun `posta - i numeri dei gruppi e il pallino della barra vengono da conteggi`() {
         serverBase()
         server.rispondi(
             "GET /api/conteggi",
@@ -106,41 +105,44 @@ class ViewModelTest {
         vm.carica()
         aspetta { vm.stato.value.conteggi != null }
         val s = vm.stato.value
-        assertEquals(
-            "urgenti non è una piastrella; a zero (truffe) non si vede",
-            listOf(VoceDaFare.DA_RISPONDERE to 5, VoceDaFare.DA_CONTROLLARE to 3, VoceDaFare.SCADENZE to 2),
-            s.piastrelle.map { it.voce to it.numero },
-        )
         assertEquals(9, s.daLeggere(s.gruppi.first { it.id == 1L }))
         assertEquals("senza conteggio vale l'elenco dei gruppi", 1, s.daLeggere(s.gruppi.first { it.id == 6L }))
+        assertEquals("il pallino: le importanti da leggere", 10, s.daLeggere)
     }
 
     @Test
-    fun `posta - la piastrella Possibili truffe c'e solo se ce n'e almeno una`() {
+    fun `posta - le mail da sistemare sono le da controllare non sospette, solo nella Posta`() {
         serverBase()
-        server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 0}""")
+        server.rispondi(
+            "GET /api/mail?smistamento=da_controllare&limite=50",
+            """{"mail": [${Esempi.MAIL_BIANCHI}, ${Esempi.MAIL_SOSPETTA}], "altre": false}""",
+        )
         val vm = PostaViewModel(client, cache)
         vm.carica()
-        aspetta { vm.stato.value.conteggi != null }
-        assertTrue("a zero la piastrella non c'è", vm.stato.value.piastrelle.none { it.voce == VoceDaFare.TRUFFE })
+        aspetta { vm.stato.value.caricataAlmenoUnaVolta }
+        assertEquals("la possibile truffa non si smista", 1, vm.stato.value.daSistemare)
 
-        server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 2}""")
-        server.rispondi("GET /api/mail?sospetta=true&limite=50", """{"mail": [${Esempi.MAIL_SOSPETTA}], "altre": false}""")
-        vm.carica()
-        aspetta { vm.stato.value.conteggi?.sospette == 2 }
-        val truffe = vm.stato.value.piastrelle.single { it.voce == VoceDaFare.TRUFFE }
-        assertEquals(2, truffe.numero)
-        assertEquals("possibili truffe", truffe.etichetta)
+        val raccolta = PostaViewModel(client, cache)
+        raccolta.scegliGruppo(3)
+        aspetta { raccolta.stato.value.caricataAlmenoUnaVolta }
+        assertEquals(
+            "nelle raccolte non si chiede",
+            1,
+            server.richiesteA("GET /api/mail").count { it.path == "/api/mail?smistamento=da_controllare&limite=50" },
+        )
+    }
 
-        vm.scegliFiltro(VoceDaFare.TRUFFE.filtro!!)
-        aspetta { vm.stato.value.mail.map { it.id } == listOf(820L) }
-        assertTrue(vm.stato.value.mail.single().sospetta)
-        // Chiarite tutte mentre il filtro è scelto: niente piastrella, il filtro resta (c'è "togli filtro").
-        server.rispondi("GET /api/conteggi", """{"da_rispondere": 5, "sospette": 0}""")
-        vm.carica()
-        aspetta { vm.stato.value.conteggi?.sospette == 0 && !vm.stato.value.caricamento }
-        assertTrue(vm.stato.value.piastrelle.none { it.voce == VoceDaFare.TRUFFE })
-        assertEquals(FiltroRapido.SOSPETTE, vm.stato.value.filtro)
+    @Test
+    fun `posta - la ricerca chiede cerca, vuota non chiede niente`() {
+        serverBase()
+        server.rispondi("GET /api/mail?cerca=capannone+Bassano&limite=50", """{"mail": [${Esempi.MAIL}], "altre": false}""")
+        val vm = PostaViewModel(client, cache)
+        vm.cerca("")
+        assertTrue(vm.stato.value.mail.isEmpty())
+        assertTrue(server.richieste.isEmpty())
+        vm.cerca("capannone Bassano")
+        aspetta { vm.stato.value.mail.map { it.id } == listOf(812L) }
+        assertTrue(server.richiesteA("GET /api/mail").none { it.path!!.contains("smistamento") })
     }
 
     @Test
@@ -569,6 +571,41 @@ class ViewModelTest {
         aspetta { vm.stato.value.erroreAzione != null }
         assertTrue(vm.stato.value.erroreAzione!!.startsWith("Questo colore non c'è"))
         assertEquals("petrolio", vm.stato.value.gruppi.first { it.id == 2L }.colore)
+    }
+
+    @Test
+    fun `impostazioni - nome per il saluto, al massimo 40 caratteri (contratto 18_3)`() {
+        val vm = impostazioni()
+        server.rispondi("PATCH /api/impostazioni", Esempi.impostazioni().replace("\"conserva_giorni\": 180", "\"conserva_giorni\": 180, \"nome\": \"Manuel\""))
+        vm.cambiaNome("  Manuel  ")
+        aspetta { vm.stato.value.impostazioni?.nome == "Manuel" && !vm.stato.value.inCorso }
+        assertEquals("""{"nome":"Manuel"}""", server.richiesteA("PATCH /api/impostazioni").single().body.readUtf8())
+        vm.cambiaNome("x".repeat(50))
+        aspetta { server.richiesteA("PATCH /api/impostazioni").size == 2 && !vm.stato.value.inCorso }
+        assertEquals("""{"nome":"${"x".repeat(40)}"}""", server.richiesteA("PATCH /api/impostazioni").last().body.readUtf8())
+    }
+
+    @Test
+    fun `impostazioni - raccolta e posizione dei gruppi (contratto 18_2)`() {
+        val vm = impostazioni()
+        server.rispondi("PATCH /api/gruppi/2", "{}")
+        server.rispondi("PATCH /api/gruppi/6", "{}")
+        vm.cambiaRaccoltaGruppo(2, true)
+        aspetta { vm.stato.value.gruppi.first { it.id == 2L }.raccolta && !vm.stato.value.inCorso }
+        assertEquals("""{"raccolta":true}""", server.richiesteA("PATCH /api/gruppi/2").single().body.readUtf8())
+
+        // Altro sale di un posto: si rinumerano solo i gruppi che cambiano posto.
+        vm.spostaGruppo(6, su = true)
+        aspetta { vm.stato.value.gruppi.map { it.id } == listOf(1L, 6L, 2L) && !vm.stato.value.inCorso }
+        assertEquals(listOf(1, 2, 3), vm.stato.value.gruppi.map { it.ordine })
+        assertEquals("""{"ordine":2}""", server.richiesteA("PATCH /api/gruppi/6").single().body.readUtf8())
+        assertEquals("""{"ordine":3}""", server.richiesteA("PATCH /api/gruppi/2").last().body.readUtf8())
+        assertTrue("il primo non cambia posto", server.richiesteA("PATCH /api/gruppi/1").isEmpty())
+
+        // Il primo non sale più su: nessuna richiesta.
+        val prima = server.richieste.size
+        vm.spostaGruppo(1, su = true)
+        assertEquals(prima, server.richieste.size)
     }
 
     @Test

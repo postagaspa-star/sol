@@ -1,80 +1,94 @@
 package eu.stgm.sol.ui.dettaglio
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.sol.dati.Bozza
-import eu.stgm.sol.ui.BarraCaricamento
 import eu.stgm.sol.ui.DialogoConferma
-import eu.stgm.sol.ui.FasciaCalda
 import eu.stgm.sol.ui.FilaPulsanti
+import eu.stgm.sol.ui.Icone
+import eu.stgm.sol.ui.MARGINE
+import eu.stgm.sol.ui.PillolaAzione
 import eu.stgm.sol.ui.PulsanteTesto
-import eu.stgm.sol.ui.PulsanteVuoto
+import eu.stgm.sol.ui.PulsanteTondo
+import eu.stgm.sol.ui.tema.Sol
 
-/** Il sollecito di una mail inviata: la bozza da sola, con la stessa conferma prima dell'invio. */
+/** Il sollecito di una mail inviata: la risposta da sola, con la stessa conferma prima dell'invio. */
 @Composable
 fun BozzaScreen(vm: BozzaViewModel, bozzaId: Long, giaLetta: Bozza?, onApriMail: (Long) -> Unit, onIndietro: () -> Unit) {
     val stato by vm.bozza.stato.collectAsStateWithLifecycle()
-    var mostraRifai by rememberSaveable { mutableStateOf(false) }
     var chiediScarta by rememberSaveable { mutableStateOf(false) }
     DisposableEffect(bozzaId) {
         vm.apri(bozzaId, giaLetta)
         onDispose { vm.sospendi() }
     }
-    Column(Modifier.fillMaxSize()) {
-        FasciaCalda(if (stato.bozza?.tipo == "sollecito") "Sollecito" else "Bozza", indietro = onIndietro)
-        BarraCaricamento(stato.inCorso)
+    val bozza = stato.bozza
+    Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .statusBarsPadding()
+                .padding(start = MARGINE, end = MARGINE, top = 10.dp, bottom = 120.dp),
         ) {
-            RiquadroRisposta(vm.bozza, stato, giaRisposto = false, titolo = "Testo da inviare")
-            val bozza = stato.bozza
-            FilaPulsanti(Modifier.padding(top = 16.dp)) {
-                bozza?.mailId?.let { mailId -> PulsanteVuoto("Apri la mail", onClick = { onApriMail(mailId) }) }
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                PulsanteTondo(Icone.Indietro, "Indietro", onIndietro)
+            }
+            Text(
+                if (bozza?.tipo == "sollecito") "Sollecito" else "Risposta",
+                style = Sol.testi.titoloPagina,
+                color = Sol.colori.testo,
+                modifier = Modifier.padding(top = 12.dp).semantics { heading() },
+            )
+            if (bozza != null && bozza.oggetto.isNotBlank()) {
+                Text(bozza.oggetto, style = Sol.testi.medio, color = Sol.colori.tenue, modifier = Modifier.padding(top = 6.dp))
+            }
+            RispostaDiSol(
+                vm.bozza,
+                stato,
+                giaRisposto = false,
+                onTono = { istruzioni -> vm.bozza.rifaiDallaBarra(istruzioni, vm::rifai) },
+                modifier = Modifier.padding(top = 18.dp),
+                titolo = "Sollecito di Sol",
+            )
+            FilaPulsanti(Modifier.padding(top = 14.dp)) {
+                bozza?.mailId?.let { mailId -> PillolaAzione("Apri la mail", { onApriMail(mailId) }) }
                 if (bozza != null && !bozza.chiusa && !bozza.inPreparazione) {
-                    PulsanteTesto(
-                        "Scarta",
-                        { chiediScarta = true },
-                        abilitato = !stato.campiBloccati,
-                        colore = MaterialTheme.colorScheme.error,
-                    )
+                    PulsanteTesto("Scarta", { chiediScarta = true }, abilitato = !stato.campiBloccati, colore = Sol.colori.truffaTesto)
                 }
             }
+            Spacer(Modifier.height(8.dp))
         }
         BarraRisposta(
             barraPer(null, stato),
-            onRifai = { mostraRifai = true },
             onInvia = vm.bozza::inviaDallaBarra,
             onPrepara = {},
+            modifier = Modifier.align(Alignment.BottomCenter),
+            testoInvia = if (bozza?.tipo == "sollecito") "Invia sollecito" else "Invia risposta",
         )
     }
     FinestreRisposta(vm.bozza, stato)
-    if (mostraRifai) {
-        DialogoRifai(
-            onRifai = { istruzioni ->
-                mostraRifai = false
-                vm.bozza.rifaiDallaBarra(istruzioni, vm::rifai)
-            },
-            onAnnulla = { mostraRifai = false },
-        )
-    }
     if (chiediScarta) {
         DialogoConferma(
             titolo = "Scartare il sollecito?",

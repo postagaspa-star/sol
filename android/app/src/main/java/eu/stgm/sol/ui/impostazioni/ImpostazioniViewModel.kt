@@ -353,6 +353,41 @@ class ImpostazioniViewModel(
         }
     }
 
+    /** 18.2: una raccolta sta chiusa in una riga sola nella Posta "Importanti". */
+    fun cambiaRaccoltaGruppo(id: Long, raccolta: Boolean) = lavora {
+        when (val e = client.cambiaRaccoltaGruppo(id, raccolta)) {
+            is Esito.Ok -> {
+                _stato.update { s -> s.copy(gruppi = s.gruppi.map { if (it.id == id) it.copy(raccolta = raccolta) else it }) }
+                null
+            }
+            else -> fallita(e)
+        }
+    }
+
+    /**
+     * Sposta un gruppo di un posto. Il contratto ha solo `ordine` per gruppo: si
+     * rinumerano da 1 quelli che cambiano, così l'ordine vale anche se prima erano
+     * tutti uguali.
+     */
+    fun spostaGruppo(id: Long, su: Boolean) = lavora {
+        val lista = _stato.value.gruppi
+        val i = lista.indexOfFirst { it.id == id }
+        val j = if (su) i - 1 else i + 1
+        if (i < 0 || j !in lista.indices) return@lavora null
+        val nuova = lista.toMutableList().apply { add(j, removeAt(i)) }
+        nuova.forEachIndexed { k, g ->
+            if (g.ordine != k + 1) {
+                val e = client.cambiaOrdineGruppo(g.id, k + 1)
+                if (e !is Esito.Ok) {
+                    ricaricaGruppi()
+                    fallita(e)
+                }
+            }
+        }
+        _stato.update { it.copy(gruppi = nuova.mapIndexed { k, g -> g.copy(ordine = k + 1) }) }
+        null
+    }
+
     fun togliGruppo(id: Long) = lavora {
         when (val e = client.togliGruppo(id)) {
             is Esito.Ok -> {
@@ -426,6 +461,9 @@ class ImpostazioniViewModel(
 
     fun cambiaGiorniSollecito(giorni: Int) =
         cambia(buildJsonObject { put("giorni_sollecito", giorni.coerceIn(1, 60)) }) { "Salvato." }
+
+    /** 18.3: come salutare nella pagina Oggi; al massimo 40 caratteri. */
+    fun cambiaNome(nome: String) = cambia(buildJsonObject { put("nome", nome.trim().take(40)) }) { "Nome salvato." }
 
     fun cambiaFirma(firma: String) = cambia(buildJsonObject { put("firma", firma) }) { "Firma salvata." }
 

@@ -43,6 +43,19 @@ interface MemoriaNovita {
     suspend fun segnaAvvisoScollegatoDato()
 }
 
+/** Il tema scelto nelle Impostazioni: automatico segue il telefono. */
+enum class TemaScelto { AUTOMATICO, CHIARO, SCURO }
+
+/** Le scelte d'aspetto di questo telefono. Interfaccia: nei test vive in memoria. */
+interface PreferenzeAspetto {
+    val tema: Flow<TemaScelto>
+    suspend fun cambiaTema(tema: TemaScelto)
+
+    /** Il tutorial è già stato visto (o saltato): al primo avvio parte da solo, una volta. */
+    val tutorialVisto: Flow<Boolean>
+    suspend fun segnaTutorialVisto()
+}
+
 private val Context.dataStore by preferencesDataStore(name = "sol")
 
 /**
@@ -50,7 +63,7 @@ private val Context.dataStore by preferencesDataStore(name = "sol")
  * dell'Android Keystore che non esce mai dal telefono: chi copiasse i file
  * dell'app non potrebbe usarlo.
  */
-class Archivio(private val context: Context) : DepositoConfigurazione, MemoriaNovita {
+class Archivio(private val context: Context) : DepositoConfigurazione, MemoriaNovita, PreferenzeAspetto {
 
     private object Chiavi {
         val SERVER = stringPreferencesKey("server")
@@ -68,6 +81,9 @@ class Archivio(private val context: Context) : DepositoConfigurazione, MemoriaNo
         // versione il prossimo dopo un giorno (dal pulsante delle Impostazioni sempre).
         val AGGIORNAMENTO_FALLITO_CODICE = intPreferencesKey("aggiornamento_fallito_codice")
         val AGGIORNAMENTO_FALLITO_IL = longPreferencesKey("aggiornamento_fallito_il")
+
+        val TEMA = stringPreferencesKey("tema")
+        val TUTORIAL_VISTO = booleanPreferencesKey("tutorial_visto")
     }
 
     // Decifrare passa dal Keystore, che su certi telefoni è lento: fuori dal thread principale.
@@ -144,6 +160,20 @@ class Archivio(private val context: Context) : DepositoConfigurazione, MemoriaNo
             p[Chiavi.AGGIORNAMENTO_FALLITO_CODICE] = codice
             p[Chiavi.AGGIORNAMENTO_FALLITO_IL] = quando
         }
+    }
+
+    override val tema: Flow<TemaScelto> = context.dataStore.data.map { p ->
+        TemaScelto.entries.firstOrNull { it.name == p[Chiavi.TEMA] } ?: TemaScelto.AUTOMATICO
+    }
+
+    override suspend fun cambiaTema(tema: TemaScelto) {
+        context.dataStore.edit { p -> p[Chiavi.TEMA] = tema.name }
+    }
+
+    override val tutorialVisto: Flow<Boolean> = context.dataStore.data.map { p -> p[Chiavi.TUTORIAL_VISTO] ?: false }
+
+    override suspend fun segnaTutorialVisto() {
+        context.dataStore.edit { p -> p[Chiavi.TUTORIAL_VISTO] = true }
     }
 
     val richiestaNotificheFatta: Flow<Boolean> =

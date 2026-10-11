@@ -17,6 +17,7 @@ import eu.stgm.sol.dati.JsonSol
 import eu.stgm.sol.dati.Mail
 import eu.stgm.sol.dati.ModificaBozza
 import eu.stgm.sol.dati.Novita
+import eu.stgm.sol.dati.Oggi
 import eu.stgm.sol.dati.NuovaScadenza
 import eu.stgm.sol.dati.PaginaMail
 import eu.stgm.sol.dati.Regola
@@ -66,6 +67,8 @@ data class FiltroMail(
     val filtro: FiltroRapido = FiltroRapido.TUTTE,
     val primaDi: Long? = null,
     val limite: Int = 50,
+    /** La ricerca (§6 `cerca=testo`). */
+    val cerca: String? = null,
 ) {
     /** GET /api/mail con i parametri del contratto (§6). */
     fun percorso(): String {
@@ -78,6 +81,7 @@ data class FiltroMail(
                 FiltroRapido.DA_CONTROLLARE -> add("smistamento=da_controllare")
                 FiltroRapido.SOSPETTE -> add("sospetta=true")
             }
+            cerca?.trim()?.takeIf { it.isNotEmpty() }?.let { add("cerca=" + java.net.URLEncoder.encode(it, "UTF-8")) }
             add("limite=$limite")
             primaDi?.let { add("prima_di=$it") }
         }
@@ -210,6 +214,13 @@ class SolClient(
     suspend fun cambiaColoreGruppo(id: Long, colore: String): Esito<Unit> =
         chiamaSenzaDato("PATCH", "/api/gruppi/$id", buildJsonObject { put("colore", colore) }.toString())
 
+    /** 18.2: una raccolta compare nella Posta come una riga sola chiusa. */
+    suspend fun cambiaRaccoltaGruppo(id: Long, raccolta: Boolean): Esito<Unit> =
+        chiamaSenzaDato("PATCH", "/api/gruppi/$id", buildJsonObject { put("raccolta", raccolta) }.toString())
+
+    suspend fun cambiaOrdineGruppo(id: Long, ordine: Int): Esito<Unit> =
+        chiamaSenzaDato("PATCH", "/api/gruppi/$id", buildJsonObject { put("ordine", ordine) }.toString())
+
     suspend fun togliGruppo(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/gruppi/$id", null)
 
     suspend fun regole(): Esito<List<Regola>> = chiama("GET", "/api/regole", null, ListSerializer(Regola.serializer()))
@@ -221,6 +232,9 @@ class SolClient(
     suspend fun mail(filtro: FiltroMail): Esito<PaginaMail> = chiama("GET", filtro.percorso(), null, PaginaMail.serializer())
 
     suspend fun conteggi(): Esito<Conteggi> = chiama("GET", "/api/conteggi", null, Conteggi.serializer())
+
+    /** 18.1: la pagina Oggi in una chiamata. */
+    suspend fun oggi(): Esito<Oggi> = chiama("GET", "/api/oggi", null, Oggi.serializer())
 
     suspend fun dettaglioMail(id: Long): Esito<Mail> = chiama("GET", "/api/mail/$id", null, Mail.serializer())
 
