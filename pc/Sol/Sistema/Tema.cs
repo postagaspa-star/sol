@@ -7,12 +7,12 @@ namespace Sol.Sistema;
 /// <summary>
 /// Il tema di Windows (chiaro o scuro). La pagina lo segue da sola (<c>prefers-color-scheme</c>); qui serve
 /// per lo sfondo della finestra prima che la pagina sia pronta e per la barra del titolo, così niente lampo
-/// bianco col tema scuro. I due fondi sono quelli della guida (docs/aspetto.md): #FFFBF7 e #14110F.
+/// bianco col tema scuro. I due fondi sono quelli della guida (docs/aspetto.md, Sol 2.0): #F4F4F2 e #121214.
 /// </summary>
 public static class Tema
 {
-    public static readonly Color FondoChiaro = Color.FromArgb(0xFF, 0xFB, 0xF7);
-    public static readonly Color FondoScuro = Color.FromArgb(0x14, 0x11, 0x0F);
+    public static readonly Color FondoChiaro = Color.FromArgb(0xF4, 0xF4, 0xF2);
+    public static readonly Color FondoScuro = Color.FromArgb(0x12, 0x12, 0x14);
 
     private const string ChiaveTema = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
@@ -34,6 +34,9 @@ public static class Tema
     public static bool ScuroDa(object? valore) => valore is int numero && numero == 0;
 
     public static Color Fondo(bool scuro) => scuro ? FondoScuro : FondoChiaro;
+
+    /// <summary>Scuro o no, con la scelta delle impostazioni ("chiaro", "scuro", altrimenti come Windows).</summary>
+    public static bool ScuroPer(string? scelta, bool sistemaScuro) => scelta == "scuro" || (scelta != "chiaro" && sistemaScuro);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr finestra, int attributo, ref int valore, int dimensione);

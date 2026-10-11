@@ -29,7 +29,7 @@ public sealed class FinestraSol : Form
     /// <summary>Le sezioni dell'interfaccia (SEZIONI di app.js) che si possono aprire da fuori (clic su una notifica).</summary>
     private static readonly HashSet<string> Sezioni = new(StringComparer.Ordinal)
     {
-        "posta", "da-rispondere", "urgenti", "da-controllare", "riassunti", "indietro", "scadenze", "impostazioni", "notifiche", "truffe",
+        "oggi", "posta", "smista", "aspetti", "da-rispondere", "urgenti", "da-controllare", "riassunti", "indietro", "scadenze", "impostazioni", "notifiche", "truffe",
     };
 
     public FinestraSol(Ponte ponte, string cartellaUi, string cartellaDatiWebView, Icon icona, string? frammento = null)
@@ -47,15 +47,42 @@ public sealed class FinestraSol : Form
         MinimumSize = new Size(980, 600);
         StartPosition = FormStartPosition.CenterScreen;
         // Lo sfondo prima che la pagina sia pronta è quello del tema (niente lampo bianco col tema scuro).
-        var scuro = Tema.Scuro();
+        var scuro = Tema.ScuroPer(ponte.TemaScelto, Tema.Scuro());
         BackColor = Tema.Fondo(scuro);
 
         vista = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
         Controls.Add(vista);
         Load += async (_, _) => await InizializzaAsync();
-        HandleCreated += (_, _) => Tema.BarraDelTitolo(Handle, Tema.Scuro());
+        HandleCreated += (_, _) => Tema.BarraDelTitolo(Handle, Tema.ScuroPer(ponte.TemaScelto, Tema.Scuro()));
         SystemEvents.UserPreferenceChanged += SuCambioTema;
-        FormClosed += (_, _) => SystemEvents.UserPreferenceChanged -= SuCambioTema;
+        ponte.TemaCambiato += SuTemaScelto;
+        // Il microfono della pagina: Win+H nella finestra di Sol (la dettatura di Windows scrive nel campo col cursore).
+        ponte.Detta = () => SuFinestra(() =>
+        {
+            vista.Focus();
+            Dettatura.Apri();
+        });
+        FormClosed += (_, _) =>
+        {
+            SystemEvents.UserPreferenceChanged -= SuCambioTema;
+            ponte.TemaCambiato -= SuTemaScelto;
+            ponte.Detta = null;
+        };
+    }
+
+    private void SuTemaScelto() => SuCambioTema(this, new UserPreferenceChangedEventArgs(UserPreferenceCategory.General));
+
+    private void SuFinestra(Action azione)
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(azione);
+        }
+        catch (InvalidOperationException)
+        {
+            // la finestra si sta chiudendo
+        }
     }
 
     /// <summary>Windows passa da chiaro a scuro (o viceversa): la pagina si adegua da sola, qui la barra del titolo e lo sfondo.</summary>
@@ -67,7 +94,7 @@ public sealed class FinestraSol : Form
             BeginInvoke(() =>
             {
                 if (IsDisposed) return;
-                var scuro = Tema.Scuro();
+                var scuro = Tema.ScuroPer(ponte.TemaScelto, Tema.Scuro());
                 BackColor = Tema.Fondo(scuro);
                 Tema.BarraDelTitolo(Handle, scuro);
             });

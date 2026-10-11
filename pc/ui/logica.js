@@ -14,7 +14,8 @@
 
   /** I filtri fissi della colonna di sinistra, con la richiesta al server (§6). */
   const FILTRI = {
-    tutte: { titolo: 'Tutta la posta', parametri: {} },
+    importanti: { titolo: 'Importanti', parametri: {} },
+    tutte: { titolo: 'Tutte', parametri: {} },
     'da-rispondere': { titolo: 'Da rispondere', parametri: { da_rispondere: 'true' } },
     urgenti: { titolo: 'Urgenti', parametri: { urgenza: 'alta' } },
     'da-controllare': { titolo: 'Da controllare', parametri: { smistamento: 'da_controllare' } },
@@ -43,9 +44,13 @@
     const f = String(frammento || '').replace(/^#/, '');
     const mail = /^mail\/(\d{1,15})$/.exec(f);
     if (mail) return { vista: 'posta', filtro: null, mailId: Number(mail[1]) };
-    if (f === 'posta' || f === '') return { vista: 'posta', filtro: { tipo: 'tutte' }, mailId: null };
-    if (FILTRI[f]) return { vista: 'posta', filtro: { tipo: f }, mailId: null };
-    if (['riassunti', 'indietro', 'scadenze', 'impostazioni'].includes(f)) return { vista: f, filtro: null, mailId: null };
+    if (f === 'posta') return { vista: 'posta', filtro: { tipo: 'importanti' }, mailId: null };
+    // Le notifiche di prima (urgenti, truffe) aprono "Tutte" col loro filtro; le bozze pronte aprono Oggi.
+    if (f === 'urgenti' || f === 'truffe' || f === 'tutte') return { vista: 'posta', filtro: { tipo: f }, mailId: null };
+    if (f === 'da-rispondere' || f === 'oggi' || f === '') return { vista: 'oggi', filtro: null, mailId: null };
+    if (f === 'da-controllare' || f === 'smista') return { vista: 'smista', filtro: null, mailId: null };
+    if (f === 'indietro' || f === 'aspetti') return { vista: 'aspetti', filtro: null, mailId: null };
+    if (['riassunti', 'scadenze', 'impostazioni', 'notifiche'].includes(f)) return { vista: f, filtro: null, mailId: null };
     return null;
   }
 
@@ -324,7 +329,7 @@
     return /^http:\/\//i.test(String(server || ''));
   }
 
-  // --- Aspetto 1.3 (docs/aspetto.md) --------------------------------------------------------
+  // --- Sol 2.0 (docs/aspetto.md, contratto §17-18) -----------------------------------------------
 
   /** I 12 colori dei gruppi (contratto §17): il server manda il NOME, la pagina lo traduce nelle tinte del tema. */
   const COLORI_GRUPPI = ['blu', 'verde', 'ambra', 'viola', 'grigio', 'ardesia', 'petrolio', 'rosa', 'indaco', 'oliva', 'marrone', 'ciano'];
@@ -337,7 +342,7 @@
 
   const PAROLINE = new Set(['di', 'da', 'del', 'della', 'dei', 'delle', 'e', 'ed', 'la', 'il', 'lo', 'le', 'per', 's.r.l.', 'srl', 'spa', 's.p.a.']);
 
-  /** Le iniziali per il cerchio colorato: "Mario Rossi" → MR, "Comune di Bassano" → CB, "rossi@esempio.it" → RO. */
+  /** Le iniziali per il cerchio: "Mario Rossi" → MR, "Comune di Bassano" → CB, "rossi@esempio.it" → RO. */
   function iniziali(nome, indirizzo) {
     let t = String(nome || '').trim();
     let separatori = /\s+/;
@@ -354,37 +359,312 @@
     return (prima(parole[0]) + prima(parole[parole.length - 1])).toUpperCase();
   }
 
-  /**
-   * I segnali di una riga, al massimo due e in quest'ordine (docs/aspetto.md, §1): possibile truffa, urgente,
-   * da controllare, risposta pronta. Una risposta già data non mostra "risposta pronta" (§15.13).
-   */
-  function segnaliMail(m) {
-    const s = [];
-    if (m.sospetta) s.push('truffa');
-    if (m.urgenza === 'alta') s.push('urgente');
-    if (m.smistamento === 'da_controllare') s.push('controllare');
-    if (!m.risposta_data && m.bozza && m.bozza.stato === 'pronta') s.push('pronta');
-    return s.slice(0, 2);
+  /** La lettera nel cerchio delle impostazioni: l'iniziale del nome (vuota se il nome non c'è). */
+  function inizialeNome(nome) {
+    const p = Array.from(String(nome || '').trim().replace(/[^\p{L}\p{N}]/gu, ''));
+    return p.length ? p[0].toUpperCase() : '';
+  }
+
+  /** "Mario Rossi" → "Rossi"; "Ferramenta Neri" → "Neri"; un indirizzo resta com'è. */
+  function cognome(nome) {
+    const p = String(nome || '').trim().split(/\s+/).filter(Boolean);
+    return p.length ? p[p.length - 1] : '';
   }
 
   /**
-   * Il riquadro "Da fare" (docs/aspetto.md, §2): le piastrelle con il loro numero, solo quelle sopra zero.
-   * Senza conteggi (server di prima della v1.1) le piastrelle ci sono tutte, senza numero: i filtri restano a portata.
+   * Al massimo UN segno per riga (docs/aspetto.md, §4): "Possibile truffa" oppure "Risposta pronta" (non se la
+   * risposta è già stata data, §15.13) oppure niente. L'urgenza si vede dal colore dell'ora, non da un segno.
    */
-  function daFare(conteggi) {
-    const voci = [
-      { chiave: 'da-rispondere', etichetta: 'Da rispondere', campo: 'da_rispondere', filtro: { tipo: 'da-rispondere' } },
-      { chiave: 'truffe', etichetta: 'Possibili truffe', campo: 'sospette', filtro: { tipo: 'truffe' } },
-      { chiave: 'da-controllare', etichetta: 'Da controllare', campo: 'da_controllare', filtro: { tipo: 'da-controllare' } },
-      { chiave: 'scadenze', etichetta: 'Scadenze della settimana', campo: 'scadenze_prossime', vista: 'scadenze' },
-    ];
-    if (!conteggi || typeof conteggi !== 'object') return voci.map((v) => Object.assign({ numero: null }, v));
-    return voci
-      .map((v) => Object.assign({ numero: Number(conteggi[v.campo]) || 0 }, v))
-      .filter((v) => v.numero > 0);
+  function segnoRiga(m) {
+    if (m.sospetta) return 'truffa';
+    if (!m.risposta_data && m.bozza && m.bozza.stato === 'pronta') return 'pronta';
+    return null;
   }
 
-  /** L'ora nell'intestazione della mail aperta: "oggi 08:12", "ieri 17:05", "lunedì 6 ottobre, 08:12". */
+  /** Il saluto della pagina Oggi secondo l'ora. */
+  function saluto(adesso) {
+    const ora = (adesso ? new Date(adesso) : new Date()).getHours();
+    if (ora >= 5 && ora < 13) return 'Buongiorno';
+    if (ora >= 13 && ora < 18) return 'Buon pomeriggio';
+    return 'Buonasera';
+  }
+
+  function maiuscola(t) {
+    const s = String(t || '');
+    return s ? s[0].toUpperCase() + s.slice(1) : s;
+  }
+
+  function minuscolaIniziale(t) {
+    const s = String(t || '');
+    // "Offerta a Rossi" → "offerta a Rossi"; le sigle (PEC, IVA) restano come sono.
+    return s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s;
+  }
+
+  function dataDaGiorno(quando) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(quando || ''));
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+  }
+
+  /** "Sabato 11 ottobre · 14 mail nuove" sotto il saluto. */
+  function rigaOggi(data, mailOggi, adesso) {
+    const d = dataDaGiorno(data) || (adesso ? new Date(adesso) : new Date());
+    const giorno = maiuscola(GIORNI_LUNGHI[d.getDay()]) + ' ' + d.getDate() + ' ' + MESI_LUNGHI[d.getMonth()];
+    if (mailOggi == null) return giorno;
+    const n = Number(mailOggi) || 0;
+    const mail = n === 0 ? 'nessuna mail nuova' : n === 1 ? '1 mail nuova' : n + ' mail nuove';
+    return giorno + ' · ' + mail;
+  }
+
+  /** Un giorno vicino detto breve: "Oggi", "Domani", "Venerdì" (entro la settimana), poi "16 ottobre". */
+  function giornoBreve(quando, adesso) {
+    const d = dataDaGiorno(quando);
+    if (!d) return String(quando || '');
+    const oggi = adesso ? new Date(adesso) : new Date();
+    oggi.setHours(0, 0, 0, 0);
+    const diff = Math.round((d - oggi) / 86400000);
+    if (diff === 0) return 'Oggi';
+    if (diff === 1) return 'Domani';
+    if (diff > 1 && diff < 7) return maiuscola(GIORNI_LUNGHI[d.getDay()]);
+    if (diff < 0) return d.getDate() + ' ' + MESI_LUNGHI[d.getMonth()] + ' (passata)';
+    return d.getDate() + ' ' + MESI_LUNGHI[d.getMonth()] + (d.getFullYear() !== oggi.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+
+  /** Il titolo di un giorno nell'elenco delle scadenze: "Oggi", "Domani", "Venerdì 16", "Lunedì 3 novembre". */
+  function etichettaGiorno(quando, adesso) {
+    const d = dataDaGiorno(quando);
+    if (!d) return String(quando || '');
+    const oggi = adesso ? new Date(adesso) : new Date();
+    oggi.setHours(0, 0, 0, 0);
+    const diff = Math.round((d - oggi) / 86400000);
+    if (diff < 0) return 'Già passate';
+    if (diff === 0) return 'Oggi';
+    if (diff === 1) return 'Domani';
+    const base = maiuscola(GIORNI_LUNGHI[d.getDay()]) + ' ' + d.getDate();
+    if (diff < 7) return base;
+    return base + ' ' + MESI_LUNGHI[d.getMonth()] + (d.getFullYear() !== oggi.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+
+  /** La pillola della scadenza più vicina nel punto di oggi: "Venerdì: offerta a Rossi". */
+  function pillolaScadenza(s, adesso) {
+    if (!s) return '';
+    return giornoBreve(s.quando, adesso) + ': ' + minuscolaIniziale(s.descrizione || '');
+  }
+
+  /**
+   * Una voce di "Da fare" (GET /api/oggi, §18.1) con le parole per lo schermo: il server manda solo i dati.
+   * pulsante.stile: 'pieno' (azione principale), 'tenue' (accento tenue), 'truffa' (bianco col bordo rosso).
+   */
+  function voceOggi(v, adesso) {
+    const chi = (x) => x.mittente || x.nome || x.a || '';
+    switch (v && v.tipo) {
+      case 'risposta':
+        return { titolo: 'Rispondi a ' + chi(v), sotto: (v.oggetto || '(senza oggetto)') + ' · risposta pronta', pulsante: { etichetta: 'Rivedi', stile: 'pieno' }, cerchio: 'iniziali' };
+      case 'truffa':
+        return { titolo: 'Possibile truffa', sotto: v.riassunto || v.oggetto || chi(v), pulsante: { etichetta: 'Guarda', stile: 'truffa' }, cerchio: 'truffa' };
+      case 'smista': {
+        const n = Number(v.conteggio) || 0;
+        return { titolo: n === 1 ? 'Smista 1 mail' : 'Smista ' + n + ' mail', sotto: 'Sol non è sicuro del gruppo', pulsante: { etichetta: 'Inizia', stile: 'tenue' }, cerchio: 'smista' };
+      }
+      case 'rispondi':
+        return { titolo: 'Rispondi a ' + chi(v), sotto: v.oggetto || '(senza oggetto)', pulsante: { etichetta: 'Rispondi', stile: 'tenue' }, cerchio: 'iniziali' };
+      case 'sollecito': {
+        const g = Number(v.giorni) || 0;
+        const nome = v.nome ? cognome(v.nome) : (v.a || '');
+        return {
+          titolo: nome + ' non risponde da ' + (g === 1 ? '1 giorno' : g + ' giorni'),
+          sotto: (v.oggetto || '(senza oggetto)') + (v.bozza_id ? ' · sollecito pronto' : ''),
+          pulsante: { etichetta: v.bozza_id ? 'Rivedi' : 'Prepara', stile: 'tenue' },
+          cerchio: 'iniziali',
+        };
+      }
+      case 'scadenza':
+        return { titolo: v.descrizione || 'Scadenza', sotto: giornoBreve(v.quando, adesso), pulsante: { etichetta: 'Fatto', stile: 'tenue' }, cerchio: 'scadenza' };
+      default:
+        return null;
+    }
+  }
+
+  /** "2 di 6 fatte" e la larghezza della barra (0-100). */
+  function avanzamentoOggi(fatte, totale) {
+    const f = Math.max(0, Number(fatte) || 0);
+    const t = Math.max(f, Number(totale) || 0);
+    return { testo: f + ' di ' + t + ' fatte', percento: t ? Math.round((f / t) * 100) : 100 };
+  }
+
+  /**
+   * La pagina Oggi con un server di prima della v1.4 (niente GET /api/oggi): la stessa forma, messa insieme
+   * da quello che c'è già (riassunto di oggi, mail sospette, da rispondere, da smistare, scadenze, aspetti tu).
+   */
+  function oggiDaRisorse(r, adesso) {
+    const ora = adesso ? new Date(adesso) : new Date();
+    const giorno = ora.getFullYear() + '-' + due(ora.getMonth() + 1) + '-' + due(ora.getDate());
+    const voce = (m, tipo) => ({
+      tipo, mail_id: m.id, bozza_id: m.bozza && m.bozza.id, mittente: (m.mittente && (m.mittente.nome || m.mittente.indirizzo)) || '',
+      oggetto: m.oggetto || '', riassunto: m.riassunto || '', urgenza: m.urgenza, colore: m.colore || null,
+      iniziali: iniziali(m.mittente && m.mittente.nome, m.mittente && m.mittente.indirizzo), gruppo_id: m.gruppo_id,
+    });
+    const sospette = (r.sospette || []).filter((m) => m.sospetta);
+    const daRispondere = (r.daRispondere || []).filter((m) => !m.sospetta && !m.risposta_data);
+    const pronte = daRispondere.filter((m) => m.bozza && m.bozza.stato === 'pronta');
+    const urgentiPronte = pronte.filter((m) => m.urgenza === 'alta');
+    const altrePronte = pronte.filter((m) => m.urgenza !== 'alta');
+    const senzaBozza = daRispondere.filter((m) => !(m.bozza && m.bozza.stato === 'pronta'));
+    const smista = (r.daSmistare || []).filter((m) => !m.sospetta).length;
+    const fine = new Date(ora); fine.setHours(0, 0, 0, 0); fine.setDate(fine.getDate() + 7);
+    const scadenze = (r.scadenze || []).filter((s) => s.stato === 'aperta' || !s.stato).sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
+    const vicine = scadenze.filter((s) => { const d = dataDaGiorno(s.quando); return d && d <= fine; });
+    const da = [];
+    sospette.forEach((m) => da.push(voce(m, 'truffa')));
+    urgentiPronte.forEach((m) => da.push(voce(m, 'risposta')));
+    if (smista > 0) da.push({ tipo: 'smista', conteggio: smista });
+    altrePronte.forEach((m) => da.push(voce(m, 'risposta')));
+    senzaBozza.forEach((m) => da.push(voce(m, 'rispondi')));
+    ((r.indietro && r.indietro.aspetti_tu) || []).forEach((x) => {
+      const inv = x.inviata || {};
+      da.push({ tipo: 'sollecito', inviata_id: inv.id, bozza_id: x.bozza_sollecito && x.bozza_sollecito.id, a: (inv.a || [])[0] || '', nome: '', oggetto: inv.oggetto || '', giorni: x.giorni, iniziali: iniziali('', (inv.a || [])[0] || '') });
+    });
+    vicine.forEach((s) => da.push({ tipo: 'scadenza', scadenza_id: s.id, descrizione: s.descrizione, quando: s.quando, mail_id: s.mail_id }));
+    const daFare = da.slice(0, 8);
+    const prossima = scadenze.find((s) => { const d = dataDaGiorno(s.quando); const o = new Date(ora); o.setHours(0, 0, 0, 0); return d && d >= o; }) || null;
+    const conta = daFare.reduce((n, v) => n + (v.tipo === 'smista' ? v.conteggio : 1), 0);
+    return {
+      data: giorno,
+      nome: r.nome || '',
+      mail_oggi: Number(r.mailOggi) || 0,
+      riassunto: r.riassunto || null,
+      scadenza_prossima: prossima ? { id: prossima.id, descrizione: prossima.descrizione, quando: prossima.quando, mail_id: prossima.mail_id } : null,
+      da_fare: daFare,
+      fatte_oggi: 0,
+      totale_oggi: conta,
+      ricostruita: true,
+    };
+  }
+
+  /**
+   * Posta "Importanti" (§4): le mail dei gruppi che non sono raccolte, divise per gruppo nell'ordine dei
+   * gruppi, dalla più recente. Le sezioni senza mail non compaiono.
+   */
+  function sezioniImportanti(mail, gruppi) {
+    const ordinati = gruppiOrdinati(gruppi).filter((g) => !g.raccolta);
+    const perGruppo = new Map(ordinati.map((g) => [g.id, []]));
+    for (const m of mail || []) if (perGruppo.has(m.gruppo_id)) perGruppo.get(m.gruppo_id).push(m);
+    return ordinati
+      .map((g) => ({ gruppo: g, mail: perGruppo.get(g.id).slice().sort(confrontaMail) }))
+      .filter((s) => s.mail.length > 0);
+  }
+
+  /** La riga di una raccolta (§18.2), come il prototipo: "Newsletter" e sotto "6 mail · Webinar sulla nuova norma"
+   *  (l'oggetto dell'ultima mail); `daLeggere` serve solo a mettere il nome in grassetto. */
+  function rigaRaccolta(gruppo, conteggio) {
+    const c = conteggio || {};
+    const totale = Number(c.totale) || 0;
+    const quante = totale === 1 ? '1 mail' : totale + ' mail';
+    const ultima = c.ultima && (c.ultima.oggetto || c.ultima.mittente);
+    return { titolo: gruppo.nome, sotto: ultima ? quante + ' · ' + ultima : quante, daLeggere: Number(c.da_leggere) || 0 };
+  }
+
+  /** Il numero sul pallino della Posta: le mail da leggere dei gruppi che non sono raccolte. */
+  function daLeggereImportanti(gruppi, conteggi) {
+    const c = (conteggi && conteggi.gruppi) || {};
+    return (gruppi || []).filter((g) => !g.raccolta).reduce((n, g) => n + (Number(c[String(g.id)] && c[String(g.id)].da_leggere) || 0), 0);
+  }
+
+  /** Smista (§6): quanto è sicuro Sol del gruppo che propone. */
+  function paroleSicurezza(s) {
+    if (s == null || isNaN(Number(s))) return '';
+    return Number(s) >= 0.7 ? 'abbastanza sicuro' : 'poco sicuro';
+  }
+
+  /** Le pillole di tono sotto la risposta di Sol (§5): ognuna chiede a Sol di rifarla con questa istruzione. */
+  const TONI = [
+    { chiave: 'breve', etichetta: 'Più breve', istruzioni: 'Rendi la risposta più breve, tenendo solo le cose importanti.' },
+    { chiave: 'formale', etichetta: 'Più formale', istruzioni: 'Rendi la risposta più formale.' },
+    { chiave: 'tempo', etichetta: 'Chiedi più tempo', istruzioni: 'Rispondi chiedendo gentilmente qualche giorno in più per rispondere nel merito.' },
+  ];
+
+  /**
+   * Smista coi tasti: freccia a destra o Invio = Va bene, freccia a sinistra = Cambia (si aprono i gruppi),
+   * 1-9 = quel gruppo, Esc = chiude i gruppi (o la vista). Un tasto tenuto premuto non ripete niente.
+   */
+  function azioneTastoSmista(tasto, ctx) {
+    const k = tasto.key;
+    if (tasto.inCampo || tasto.ctrl || tasto.alt || tasto.meta || tasto.ripetuto) return null;
+    if (k === 'ArrowRight' || k === 'Enter') return { tipo: 'va-bene' };
+    if (k === 'ArrowLeft') return { tipo: 'cambia' };
+    if (k === 'Escape') return { tipo: ctx && ctx.gruppiAperti ? 'chiudi-gruppi' : 'chiudi' };
+    if (/^[1-9]$/.test(k)) {
+      const indice = Number(k) - 1;
+      return indice < ((ctx && ctx.numeroGruppi) || 0) ? { tipo: 'gruppo', indice } : null;
+    }
+    return null;
+  }
+
+  /**
+   * Il testo del riassunto con i riferimenti [#id] come parole toccabili (§3): il nome del mittente, se c'è
+   * già nella frase prima del riferimento, diventa il collegamento; se no il cognome si aggiunge alla fine
+   * della frase. Senza nome conosciuto il riferimento resta un collegamento "apri".
+   */
+  function riferimentiConNomi(testo, nomi) {
+    const pezzi = dividiRiferimenti(testo);
+    const conosciuti = nomi || {};
+    const esito = [];
+    for (let i = 0; i < pezzi.length; i++) {
+      const p = pezzi[i];
+      if (p.mailId == null) { esito.push({ testo: p.testo }); continue; }
+      const nome = conosciuti[p.mailId];
+      const prima = esito.length && esito[esito.length - 1].mailId == null ? esito[esito.length - 1] : null;
+      if (!nome) { esito.push({ mailId: p.mailId }); continue; }
+      const candidati = [nome].concat(String(nome).split(/\s+/).filter((x) => x.length >= 3).reverse());
+      let fatto = false;
+      if (prima) {
+        for (const c of candidati) {
+          const re = new RegExp('(^|[^\\p{L}])(' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![\\p{L}])', 'u');
+          const trovato = re.exec(prima.testo);
+          if (trovato) {
+            const inizio = trovato.index + trovato[1].length;
+            const fine = inizio + trovato[2].length;
+            const dopo = prima.testo.slice(fine).replace(/\s+$/, '');
+            esito.pop();
+            if (inizio > 0) esito.push({ testo: prima.testo.slice(0, inizio) });
+            esito.push({ testo: trovato[2], mailId: p.mailId });
+            if (dopo) esito.push({ testo: dopo });
+            fatto = true;
+            break;
+          }
+        }
+      }
+      if (!fatto) {
+        // Il nome non è nella frase: lo si aggiunge tra parentesi, "… un IBAN nuovo (Neri)."
+        if (prima) prima.testo = prima.testo.replace(/\s+$/, '');
+        esito.push({ testo: ' (' });
+        esito.push({ testo: cognome(nome) || nome, mailId: p.mailId });
+        esito.push({ testo: ')' });
+      }
+    }
+    // Lo spazio rimasto prima della punteggiatura ("Rossi ." → "Rossi.").
+    for (const e of esito) if (e.mailId == null && e.testo) e.testo = e.testo.replace(/^\s+(?=[.,;:!?])/, '');
+    return esito;
+  }
+
+  /** "Rispondi a tutti": gli altri destinatari della mail (tolta la nostra casella e chi ha scritto). */
+  function altriDestinatari(m, nostra) {
+    const via = new Set([String(nostra || '').toLowerCase(), String((m.mittente && m.mittente.indirizzo) || '').toLowerCase()]);
+    const tutti = [].concat(m.destinatari || [], m.cc || []).map((x) => (typeof x === 'string' ? x : (x && x.indirizzo) || '')).map((x) => elencoIndirizzi(x)[0] || '');
+    const visti = new Set();
+    return tutti.filter((x) => {
+      const k = x.toLowerCase();
+      if (!x || via.has(k) || visti.has(k)) return false;
+      visti.add(k);
+      return true;
+    });
+  }
+
+  /** Il tema scelto (Impostazioni > App): 'chiaro', 'scuro' oppure automatico (null). */
+  function temaPagina(scelta) {
+    return scelta === 'chiaro' || scelta === 'scuro' ? scelta : null;
+  }
+
+  /** L'ora in Smista e nelle righe: come oraBreve. */
   function oraIntestazione(iso, adesso) {
     const d = new Date(iso);
     if (isNaN(d)) return '';
@@ -399,10 +679,28 @@
   return {
     FILTRI,
     COLORI_GRUPPI,
+    TONI,
     coloreGruppo,
     iniziali,
-    segnaliMail,
-    daFare,
+    inizialeNome,
+    cognome,
+    segnoRiga,
+    saluto,
+    rigaOggi,
+    giornoBreve,
+    etichettaGiorno,
+    pillolaScadenza,
+    voceOggi,
+    avanzamentoOggi,
+    oggiDaRisorse,
+    sezioniImportanti,
+    rigaRaccolta,
+    daLeggereImportanti,
+    paroleSicurezza,
+    azioneTastoSmista,
+    riferimentiConNomi,
+    altriDestinatari,
+    temaPagina,
     oraIntestazione,
     queryPosta,
     destinazioneDaFrammento,

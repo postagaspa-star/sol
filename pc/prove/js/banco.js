@@ -56,23 +56,27 @@ function server() {
   const s = {
     stato: {
       abbinato: true, server: 'https://sol.esempio.ts.net', senza_protezione: false, nome_dispositivo: 'Computer dello studio', dispositivo_id: 7,
-      non_riconosciuto: false, raggiungibile: true, irraggiungibile_dal: null, ultimo_contatto: null, urgenti_da_leggere: 0, versione: '1.1.0',
-      avvio_al_login: true, avvio_disponibile: true, nome_suggerito: 'Computer STUDIO',
+      non_riconosciuto: false, raggiungibile: true, irraggiungibile_dal: null, ultimo_contatto: null, urgenti_da_leggere: 0, versione: '2.0.0',
+      avvio_al_login: true, avvio_disponibile: true, nome_suggerito: 'Computer STUDIO', tutorial_visto: true, tema: 'auto',
       aggiornamento: { attivo: true, disponibile: null, annunciata: null, scaricamento_in_corso: false, scaricato: null, errore_scaricamento: null },
     },
     salute: { ok: true, versione: '1.0.0', autenticato: true, decisore: { stato: 'pronto' }, scrittore: { stato: 'pronto' }, caselle: [], modalita_prova: true, coda: {} },
     gruppi: [
-      { id: 1, nome: 'Clienti', ordine: 1, colore: 'blu', descrizione: 'un cliente chiede o conferma un lavoro' }, { id: 2, nome: 'Fornitori', ordine: 2, colore: 'verde' },
-      { id: 3, nome: 'Amministrazione e fatture', ordine: 3, colore: 'ambra' }, { id: 4, nome: 'PEC ed enti', ordine: 4, colore: 'viola' },
-      { id: 5, nome: 'Newsletter', ordine: 5, colore: 'grigio' }, { id: 6, nome: 'Altro', ordine: 6, colore: 'ardesia' },
+      { id: 1, nome: 'Clienti', ordine: 1, colore: 'blu', raccolta: false, descrizione: 'un cliente chiede o conferma un lavoro' }, { id: 2, nome: 'Fornitori', ordine: 2, colore: 'verde', raccolta: false },
+      { id: 3, nome: 'Amministrazione e fatture', ordine: 3, colore: 'ambra', raccolta: true }, { id: 4, nome: 'PEC ed enti', ordine: 4, colore: 'viola', raccolta: false },
+      { id: 5, nome: 'Newsletter', ordine: 5, colore: 'grigio', raccolta: true }, { id: 6, nome: 'Altro', ordine: 6, colore: 'ardesia', raccolta: false },
     ],
     conteggi: true, // false = server di prima della v1.1 (404 su /api/conteggi)
     scadenzeProssime: 0, // §17: conteggi.scadenze_prossime
+    oggi: null, // §18.1: un oggetto fisso; null = calcolato dalle mail; false = server di prima della v1.4 (404)
+    riassuntoOggi: { testo: 'Giornata tranquilla.', stato: 'pronto', aggiornato_il: '2026-10-11T09:00:00+02:00', mail_citate: [] },
+    scadenze: [],
+    fatteOggi: 0,
     mails: [],
     bozze: {},
     regole: [],
     caselle: [],
-    impostazioni: { modalita_prova: true, soglia_sicurezza: 0.85, soglia_truffa: 0.5, giorni_risposta: 2, giorni_sollecito: 7, firma: 'Cordiali saluti', tono: 'cortese e diretto' },
+    impostazioni: { nome: '', modalita_prova: true, soglia_sicurezza: 0.85, soglia_truffa: 0.5, giorni_risposta: 2, giorni_sollecito: 7, firma: 'Cordiali saluti', tono: 'cortese e diretto' },
     arretrato: 0,
     indietro: { aspettano_te: [], aspetti_tu: [] },
     testoSollecito: {},
@@ -113,8 +117,35 @@ function server() {
     da_leggere: s.mails.filter((m) => !m.letta).length,
     scadenze_prossime: s.scadenzeProssime,
     bozze_pronte: Object.values(s.bozze).filter((b) => b.stato === 'pronta').length,
-    gruppi: Object.fromEntries(s.gruppi.map((g) => [String(g.id), { da_leggere: s.mails.filter((m) => m.gruppo_id === g.id && !m.letta).length, totale: s.mails.filter((m) => m.gruppo_id === g.id).length }])),
+    gruppi: Object.fromEntries(s.gruppi.map((g) => {
+      const sue = s.mails.filter((m) => m.gruppo_id === g.id).sort((a, b2) => b2.ricevuta_il.localeCompare(a.ricevuta_il));
+      const ultima = sue[0] ? { mittente: sue[0].mittente.nome || sue[0].mittente.indirizzo, oggetto: sue[0].oggetto, ricevuta_il: sue[0].ricevuta_il } : null;
+      return [String(g.id), { da_leggere: sue.filter((m) => !m.letta).length, totale: sue.length, ultima }];
+    })),
   });
+  // §18.1: "Oggi" come lo calcolerebbe il server, dalle mail del banco (le app compongono le frasi).
+  s.calcolaOggi = () => {
+    const chi = (m) => m.mittente.nome || m.mittente.indirizzo;
+    const voce = (m, tipo) => ({ tipo, mail_id: m.id, bozza_id: (s.bozzaDiMail(m.id) || {}).id || null, mittente: chi(m), oggetto: m.oggetto, riassunto: m.riassunto, urgenza: m.urgenza,
+      colore: (s.gruppi.find((g) => g.id === m.gruppo_id) || {}).colore || 'ardesia', iniziali: chi(m).split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase() });
+    const pronta = (m) => !m.sospetta && !m.risposta_data && (s.bozzaDiMail(m.id) || {}).stato === 'pronta';
+    const da = [];
+    s.mails.filter((m) => m.sospetta).forEach((m) => da.push(voce(m, 'truffa')));
+    s.mails.filter((m) => pronta(m) && m.urgenza === 'alta').forEach((m) => da.push(voce(m, 'risposta')));
+    const smista = s.mails.filter((m) => m.smistamento === 'da_controllare' && !m.sospetta).length;
+    if (smista) da.push({ tipo: 'smista', conteggio: smista });
+    s.mails.filter((m) => pronta(m) && m.urgenza !== 'alta').forEach((m) => da.push(voce(m, 'risposta')));
+    s.mails.filter((m) => m.da_rispondere && !m.risposta_data && !m.sospetta && !pronta(m)).forEach((m) => da.push(voce(m, 'rispondi')));
+    s.indietro.aspetti_tu.forEach((x) => da.push({ tipo: 'sollecito', inviata_id: x.inviata.id, bozza_id: x.bozza_sollecito ? x.bozza_sollecito.id : null, a: x.inviata.a[0], nome: '', oggetto: x.inviata.oggetto, giorni: x.giorni, iniziali: 'AN' }));
+    s.scadenze.filter((x) => x.stato === 'aperta').forEach((x) => da.push({ tipo: 'scadenza', scadenza_id: x.id, descrizione: x.descrizione, quando: x.quando, mail_id: x.mail_id }));
+    const daFare = da.slice(0, 8);
+    const prossima = s.scadenze.filter((x) => x.stato === 'aperta')[0] || null;
+    return {
+      data: '2026-10-11', nome: s.impostazioni.nome || '', mail_oggi: s.mails.length, riassunto: copia(s.riassuntoOggi),
+      scadenza_prossima: prossima ? { id: prossima.id, descrizione: prossima.descrizione, quando: prossima.quando, mail_id: prossima.mail_id } : null,
+      da_fare: daFare, fatte_oggi: s.fatteOggi, totale_oggi: s.fatteOggi + daFare.reduce((n, v) => n + (v.tipo === 'smista' ? v.conteggio : 1), 0),
+    };
+  };
 
   async function rotta(metodo, url, corpo) {
     const forzata = s.risposta && s.risposta(metodo, url, corpo);
@@ -128,6 +159,18 @@ function server() {
     if (p === '/locale/notifiche') return [200, { notifiche: copia(s.notifiche) }];
     if (p === '/locale/scollega') { s.stato.abbinato = false; return [200, { ok: true, revocato_sul_server: true }]; }
     if (p === '/locale/scarica-aggiornamento') return [200, { ok: true }];
+    if (p === '/locale/tutorial-visto') { s.stato.tutorial_visto = true; return [200, { ok: true }]; }
+    if (p === '/locale/tema') {
+      if (!['auto', 'chiaro', 'scuro'].includes(corpo && corpo.tema)) return [422, { errore: 'Tema sconosciuto.', codice: 'non_valido', campo: 'tema' }];
+      s.stato.tema = corpo.tema;
+      return [200, { ok: true, tema: corpo.tema }];
+    }
+    if (p === '/locale/detta') return [200, { ok: true }];
+    if (p === '/server/api/oggi') {
+      if (s.oggi === false) return [404, { errore: 'Non trovato.', codice: 'non_trovato' }];
+      return [200, s.oggi ? copia(s.oggi) : s.calcolaOggi()];
+    }
+    if (p === '/server/api/riassunti/oggi') return [200, copia(s.riassuntoOggi)];
     if (p === '/server/api/salute') return [200, copia(s.salute)];
     if (p === '/server/api/conteggi') return s.conteggi ? [200, s.conta()] : [404, { errore: 'Non trovato.', codice: 'non_trovato' }];
     if (p === '/server/api/gruppi' && metodo === 'GET') return [200, s.gruppi.map((g) => Object.assign({ cartella: 'Sol/' + g.nome, da_leggere: s.mails.filter((x) => x.gruppo_id === g.id && !x.letta).length, totale: s.mails.filter((x) => x.gruppo_id === g.id).length }, g))];
@@ -144,6 +187,7 @@ function server() {
     if ((m = /^\/server\/api\/gruppi\/(\d+)$/.exec(p)) && metodo === 'PATCH') {
       const g = s.gruppi.find((x) => x.id === Number(m[1]));
       if (corpo.colore != null && !COLORI.includes(corpo.colore)) return [422, { errore: FRASE_COLORE, codice: 'non_valido', campo: 'colore' }];
+      if (corpo.raccolta != null && typeof corpo.raccolta !== 'boolean') return [422, { errore: 'Raccolta: sì o no.', codice: 'non_valido', campo: 'raccolta' }];
       Object.assign(g, corpo);
       return [200, g];
     }
@@ -155,6 +199,8 @@ function server() {
       if (qs.get('letta')) l = l.filter((x) => !!x.letta === (qs.get('letta') === 'true'));
       if (qs.get('gruppo_id')) l = l.filter((x) => x.gruppo_id === Number(qs.get('gruppo_id')));
       if (qs.get('sospetta') === 'true') l = l.filter((x) => x.sospetta);
+      if (qs.get('sospetta') === 'false') l = l.filter((x) => !x.sospetta);
+      if (qs.get('cerca')) { const t = qs.get('cerca').toLowerCase(); l = l.filter((x) => (x.oggetto + ' ' + x.mittente.nome + ' ' + x.mittente.indirizzo).toLowerCase().includes(t)); }
       if (qs.get('prima_di')) { const i = l.findIndex((x) => x.id === Number(qs.get('prima_di'))); l = l.slice(i + 1); }
       const lim = Number(qs.get('limite') || 50);
       return [200, { mail: l.slice(0, lim).map(s.formaMail), altre: l.length > lim }];
@@ -162,7 +208,7 @@ function server() {
     if ((m = /^\/server\/api\/mail\/(\d+)$/.exec(p)) && metodo === 'GET') {
       const x = s.mails.find((y) => y.id === Number(m[1]));
       if (!x) return [404, { errore: 'Mail non trovata.', codice: 'non_trovato' }];
-      return [200, Object.assign(s.formaMail(x), { destinatari: ['studio@esempio.it'], cc: [], corpo: 'Corpo della mail ' + x.id, probabilita: {} })];
+      return [200, Object.assign(s.formaMail(x), { destinatari: x.destinatari || ['studio@esempio.it'], cc: x.cc || [], corpo: 'Corpo della mail ' + x.id, probabilita: {} })];
     }
     if ((m = /^\/server\/api\/mail\/(\d+)\/sospetta$/.exec(p)) && metodo === 'POST') { // §16.2
       const x = s.mails.find((y) => y.id === Number(m[1]));
@@ -231,6 +277,7 @@ function server() {
     if (p === '/server/api/impostazioni' && metodo === 'PATCH') {
       if (corpo.giorni_risposta != null && (corpo.giorni_risposta < 1 || corpo.giorni_risposta > 60)) return [422, { errore: 'I giorni per ricordare le mail senza risposta vanno da 1 a 60.', codice: 'non_valido', campo: 'giorni_risposta' }];
       if (corpo.soglia_truffa != null && (corpo.soglia_truffa < 0.2 || corpo.soglia_truffa > 0.9)) return [422, { errore: 'La soglia della possibile truffa va da 0,2 a 0,9.', codice: 'non_valido', campo: 'soglia_truffa' }];
+      if (corpo.nome != null && String(corpo.nome).length > 40) return [422, { errore: 'Il nome può avere al massimo 40 caratteri.', codice: 'non_valido', campo: 'nome' }];
       Object.assign(s.impostazioni, corpo);
       s.salute.modalita_prova = s.impostazioni.modalita_prova;
       return [200, copia(s.impostazioni)];
@@ -244,7 +291,19 @@ function server() {
     if (p === '/server/api/dispositivi') return [200, [{ id: 7, nome: 'Computer dello studio', tipo: 'pc', abbinato_il: '2026-10-01T09:00:00+02:00', ultimo_accesso: null }, { id: 8, nome: 'Telefono', tipo: 'android', abbinato_il: '2026-10-01T09:00:00+02:00', ultimo_accesso: null }]];
     if ((m = /^\/server\/api\/dispositivi\/(\d+)$/.exec(p)) && metodo === 'DELETE') return [200, { ok: true }];
     if (p === '/server/api/riassunti') return [200, []];
-    if (p === '/server/api/scadenze') return [200, []];
+    if (p === '/server/api/scadenze' && metodo === 'GET') return [200, copia(s.scadenze.filter((x) => !qs.get('stato') || x.stato === qs.get('stato')))];
+    if (p === '/server/api/scadenze' && metodo === 'POST') {
+      const x = { id: 500 + s.scadenze.length, mail_id: corpo.mail_id || null, descrizione: corpo.descrizione, quando: corpo.quando, ora: corpo.ora || null, stato: 'aperta' };
+      s.scadenze.push(x);
+      return [201, copia(x)];
+    }
+    if ((m = /^\/server\/api\/scadenze\/(\d+)$/.exec(p)) && metodo === 'PATCH') {
+      const x = s.scadenze.find((y) => y.id === Number(m[1]));
+      if (!x) return [404, { errore: 'Scadenza non trovata.', codice: 'non_trovato' }];
+      Object.assign(x, corpo);
+      if (corpo.stato === 'fatta') s.fatteOggi++;
+      return [200, copia(x)];
+    }
     return [404, { errore: 'Non trovato.', codice: 'non_trovato' }];
   }
 
@@ -332,4 +391,4 @@ async function pagina(s, opzioni) {
   return p;
 }
 
-module.exports = { jsdom, SENZA_JSDOM, server, pagina, chiudiTutte, mail, bozza, dorme, copia, COLORI };
+module.exports = { jsdom, SENZA_JSDOM, server, pagina, chiudiTutte, mail, bozza, dorme, copia, COLORI, L: require('../../ui/logica.js') };

@@ -32,4 +32,10 @@ public sealed class Configurazione
 
     /// <summary>Apri Sol all'accesso a Windows: scelto all'abbinamento, cambiabile nelle impostazioni.</summary>
     public bool AvvioAlLogin { get; set; }
+
+    /// <summary>Il tutorial di Sol 2.0 è stato visto (o saltato): al prossimo avvio non riparte da solo.</summary>
+    public bool TutorialVisto { get; set; }
+
+    /// <summary>Tema scelto nelle impostazioni: "chiaro", "scuro" oppure null (come Windows).</summary>
+    public string? Tema { get; set; }
 }

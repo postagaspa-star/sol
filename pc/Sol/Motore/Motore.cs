@@ -108,6 +108,9 @@ public sealed class Motore : IDisposable
     public event Action<int?>? UrgentiCambiati;
 
     public event Action? StatoCambiato;
+
+    /// <summary>Il tema scelto nelle impostazioni è cambiato (la finestra adegua sfondo e barra del titolo).</summary>
+    public event Action? TemaCambiato;
     public event Action<VersioneNuova>? AggiornamentoDisponibile;
 
     /// <summary>Lo scaricamento della versione nuova è finito (bene o male).</summary>
@@ -296,6 +299,8 @@ public sealed class Motore : IDisposable
             ["versione"] = Versione.Nome,
             ["avvio_al_login"] = c.AvvioAlLogin,
             ["avvio_disponibile"] = ApplicaAvvioLogin != null,
+            ["tutorial_visto"] = c.TutorialVisto,
+            ["tema"] = c.Tema ?? "auto",
             ["nome_suggerito"] = NomeSuggerito(),
             ["aggiornamento"] = new JsonObject
             {
@@ -348,6 +353,7 @@ public sealed class Motore : IDisposable
 
         lock (stato)
         {
+            // Tema e tutorial sono di questo computer, non del collegamento: restano anche ricollegandolo.
             config = new Configurazione
             {
                 Server = server,
@@ -356,6 +362,8 @@ public sealed class Motore : IDisposable
                 NomeDispositivo = nomeDispositivo,
                 AbbinatoIl = orologio(),
                 AvvioAlLogin = avvioAlLogin,
+                TutorialVisto = config.TutorialVisto,
+                Tema = config.Tema,
             };
             token = risposta.Token;
             notifiche = new StatoNotifiche();
@@ -392,8 +400,7 @@ public sealed class Motore : IDisposable
         }
         lock (stato)
         {
-            var avvio = config.AvvioAlLogin;
-            config = new Configurazione { AvvioAlLogin = avvio };
+            config = new Configurazione { AvvioAlLogin = config.AvvioAlLogin, TutorialVisto = config.TutorialVisto, Tema = config.Tema };
             token = null;
             notifiche = new StatoNotifiche();
             SalvaConfig();
@@ -413,6 +420,35 @@ public sealed class Motore : IDisposable
                 + "Toglilo da un altro dispositivo, in Impostazioni > Dispositivi collegati.";
         }
         return esito;
+    }
+
+    /// <summary>Il tutorial è stato visto o saltato: non riparte più da solo (si riapre dalle impostazioni).</summary>
+    public JsonObject SegnaTutorialVisto()
+    {
+        lock (stato)
+        {
+            config.TutorialVisto = true;
+            SalvaConfig();
+        }
+        return new JsonObject { ["ok"] = true };
+    }
+
+    /// <summary>Il tema scelto: "auto" (come Windows), "chiaro" o "scuro".</summary>
+    public string? TemaScelto
+    {
+        get { lock (stato) return config.Tema; }
+    }
+
+    public JsonObject ImpostaTema(string? tema)
+    {
+        if (tema is not ("auto" or "chiaro" or "scuro")) return new JsonObject { ["errore"] = "Il tema può essere automatico, chiaro o scuro.", ["codice"] = "non_valido", ["campo"] = "tema" };
+        lock (stato)
+        {
+            config.Tema = tema == "auto" ? null : tema;
+            SalvaConfig();
+        }
+        TemaCambiato?.Invoke();
+        return new JsonObject { ["ok"] = true, ["tema"] = tema };
     }
 
     public JsonObject ImpostaAvvioAlLogin(bool attivo)

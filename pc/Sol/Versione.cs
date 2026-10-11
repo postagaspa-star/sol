@@ -6,6 +6,6 @@ namespace Sol;
 /// </summary>
 public static class Versione
 {
-    public const string Nome = "1.1.0";
-    public const int Codice = 2;
+    public const string Nome = "2.0.0";
+    public const int Codice = 3;
 }

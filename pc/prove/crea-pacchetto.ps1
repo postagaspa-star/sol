@@ -33,6 +33,10 @@ if (-not (Test-Path $dotnet)) {
 }
 
 if (-not (Test-Path (Join-Path $radicePc 'ui\index.html'))) { throw "Manca pc\ui\index.html: senza interfaccia il pacchetto non serve." }
+# Figtree (il carattere del prototipo) va messo a mano in pc\ui\font: senza, la pagina usa Segoe UI.
+if (-not (Get-ChildItem (Join-Path $radicePc 'ui\font') -Include 'Figtree*.woff2', 'Figtree*.ttf' -Recurse -ErrorAction SilentlyContinue)) {
+    Write-Warning 'Manca pc\ui\font\Figtree.woff2 (o .ttf): il pacchetto si fa lo stesso, con Segoe UI al posto di Figtree.'
+}
 
 Write-Host "Pulizia..." -ForegroundColor Cyan
 Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue

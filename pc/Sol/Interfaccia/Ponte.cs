@@ -28,6 +28,19 @@ public sealed class Ponte
     /// <summary>Apre un indirizzo nel browser predefinito (già controllato con <see cref="ApribileFuori"/>).</summary>
     public Action<string>? ApriNelBrowser { get; set; }
 
+    /// <summary>Apre la dettatura di Windows (Win+H) nella finestra di Sol: c'è solo mentre la finestra è aperta.</summary>
+    public Action? Detta { get; set; }
+
+    /// <summary>Il tema scelto nelle impostazioni (null = come Windows).</summary>
+    public string? TemaScelto => motore.TemaScelto;
+
+    /// <summary>Il tema scelto nelle impostazioni è cambiato.</summary>
+    public event Action? TemaCambiato
+    {
+        add => motore.TemaCambiato += value;
+        remove => motore.TemaCambiato -= value;
+    }
+
     public static bool ÈInterno(string? indirizzo)
     {
         if (string.IsNullOrEmpty(indirizzo)) return false;
@@ -83,6 +96,8 @@ public sealed class Ponte
         ".png" => "image/png",
         ".ico" => "image/x-icon",
         ".woff2" => "font/woff2",
+        ".woff" => "font/woff",
+        ".ttf" => "font/ttf",
         ".txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     };
@@ -115,6 +130,14 @@ public sealed class Ponte
             "invia" => ("POST", () => motore.InviaBozzaAsync(Json.Intero(o?["bozza_id"]), Json.Intero(o?["versione"]))),
             "notifiche" => ("GET", () => Task.FromResult(motore.NotificheRecenti())),
             "avvio-login" => ("POST", () => Task.FromResult(motore.ImpostaAvvioAlLogin(Json.Booleano(o?["attivo"]) ?? false))),
+            "tutorial-visto" => ("POST", () => Task.FromResult(motore.SegnaTutorialVisto())),
+            "tema" => ("POST", () => Task.FromResult(motore.ImpostaTema(Json.Testo(o?["tema"])))),
+            "detta" => ("POST", () =>
+            {
+                if (Detta == null) return Task.FromResult(new JsonObject { ["errore"] = "La dettatura si apre solo con la finestra di Sol aperta.", ["codice"] = "non_disponibile" });
+                Detta();
+                return Task.FromResult(new JsonObject { ["ok"] = true });
+            }),
             "aggiorna-adesso" => ("POST", () =>
             {
                 motore.Sveglia();
