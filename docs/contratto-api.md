@@ -1,8 +1,8 @@
-# Sol — contratto delle API (v1.3)
+# Sol — contratto delle API (v1.4)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
 Le novità della v1.1 (dopo la prima revisione) sono raccolte nella sezione 15, quelle della v1.2
-(possibile truffa) nella sezione 16, quelle della v1.3 (colori, "Da fare") nella 17: valgono sopra il testo delle sezioni precedenti dove lo contraddicono.
+(possibile truffa) nella sezione 16, quelle della v1.3 (colori, "Da fare") nella 17, quelle della v1.4 (pagina Oggi, raccolte) nella 18: valgono sopra il testo delle sezioni precedenti dove lo contraddicono.
 Repo pubblico: negli esempi e nei test solo dati finti (Rossi, Bianchi, `@esempio.it`).
 
 ## 0. Cos'è Sol
@@ -443,3 +443,50 @@ Servono al nuovo aspetto delle app (`docs/aspetto.md`).
   (fuso Europe/Rome), escluse quelle di mail sospette.
 - Spostare di nuovo una mail con `impara: true` aggiorna la regola del mittente al gruppo nuovo (è così che
   funziona "Annulla" dopo il gesto di spostamento).
+
+## 18. Novità della v1.4: pagina "Oggi", raccolte, nome
+
+Servono a Sol 2.0 (`docs/aspetto.md`, prototipo in `docs/prototipo/`).
+
+### 18.1 `GET /api/oggi`
+Tutto quello che serve alla pagina "Oggi" in una chiamata:
+```json
+{
+  "data": "2026-10-11",
+  "nome": "Manuel",
+  "mail_oggi": 14,
+  "riassunto": {"testo": "...", "stato": "pronto", "aggiornato_il": "...", "mail_citate": [812]},
+  "scadenza_prossima": {"id": 4, "descrizione": "Offerta a Rossi", "quando": "2026-10-16", "mail_id": 812},
+  "da_fare": [
+    {"tipo": "truffa", "mail_id": 820, "mittente": "Ferramenta Neri", "oggetto": "Nuovo IBAN", "riassunto": "Chiede di pagare su un IBAN nuovo", "colore": "verde", "iniziali": "FN"},
+    {"tipo": "risposta", "mail_id": 812, "bozza_id": 55, "mittente": "Mario Rossi", "oggetto": "Offerta capannone Bassano", "riassunto": "...", "urgenza": "alta", "colore": "blu", "iniziali": "MR"},
+    {"tipo": "smista", "conteggio": 3},
+    {"tipo": "rispondi", "mail_id": 815, "mittente": "...", "oggetto": "...", "riassunto": "...", "colore": "...", "iniziali": "..."},
+    {"tipo": "sollecito", "inviata_id": 77, "bozza_id": null, "a": "neri@esempio.it", "nome": "Anna Neri", "oggetto": "Offerta compressore", "giorni": 8, "iniziali": "AN"},
+    {"tipo": "scadenza", "scadenza_id": 4, "descrizione": "Offerta a Rossi", "quando": "2026-10-16", "mail_id": 812}
+  ],
+  "fatte_oggi": 2,
+  "totale_oggi": 8
+}
+```
+- `mail_oggi`: mail arrivate oggi (Europe/Rome), tutte le caselle.
+- `scadenza_prossima`: la prima scadenza aperta da oggi in poi (null se non ce ne sono), escluse le sospette.
+- `da_fare`, in quest'ordine e al massimo 8 voci: possibili truffe non chiarite; risposte pronte a mail urgenti;
+  `smista` (una voce sola col numero di mail `da_controllare` non sospette, solo se > 0); altre risposte pronte;
+  `rispondi` (mail da rispondere senza bozza pronta); solleciti di "aspetti tu" (con la bozza se già preparata);
+  scadenze entro 7 giorni. Le app compongono le frasi dai campi (il server non scrive testi per lo schermo).
+- `fatte_oggi`: azioni chiuse oggi dall'utente: risposte e solleciti inviati, mail `da_controllare` sistemate
+  (conferma o sposta), possibili truffe chiarite, scadenze segnate fatte. `totale_oggi` = `fatte_oggi` + numero
+  di voci di `da_fare` (la voce `smista` vale quanto il suo `conteggio`).
+- `colore`/`iniziali`: colore del gruppo della mail e iniziali del mittente (1-2 lettere, dal nome o dall'indirizzo).
+
+### 18.2 Raccolte
+`Gruppo` aggiunge `"raccolta": true|false`. Un gruppo raccolta compare nella Posta "Importanti" come una riga
+sola chiusa ("Newsletter · 6 mail") invece che mail per mail. Iniziali: Newsletter e "Amministrazione e
+fatture" `true`, gli altri `false` (anche nei database esistenti). `POST`/`PATCH /api/gruppi` accettano
+`raccolta`. `GET /api/conteggi.gruppi` aggiunge per ogni gruppo `"ultima": {"mittente", "oggetto", "ricevuta_il"}`
+(l'ultima mail, per la riga della raccolta) o null.
+
+### 18.3 Nome
+`GET/PATCH /api/impostazioni` aggiunge `"nome": ""` (come salutare l'utente nella pagina Oggi; vuoto = solo
+"Buongiorno"). Massimo 40 caratteri.

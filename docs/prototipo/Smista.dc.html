@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Sol, Smista</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F4F4F2; font-family: 'Figtree', system-ui, sans-serif; color: #1B1B1F; box-sizing: border-box">
+  <div style="padding: 10px 20px 0 20px; display: flex; flex-direction: column">
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; height: 48px">
+      <a href="Main.dc.html" aria-label="Chiudi e torna a Oggi" style="width: 44px; height: 44px; border-radius: 22px; background: #E7E6E2; display: flex; align-items: center; justify-content: center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3F3F46" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </a>
+      <span style="text-align: center; font-size: 17px; font-weight: 800">Smista</span>
+      <span style="text-align: right; font-size: 14px; font-weight: 700; color: #6B6B73">{{contatore}}</span>
+    </div>
+    <div style="margin-top: 10px; height: 6px; border-radius: 3px; background: #E4E3DF; overflow: hidden">
+      <div style="width: {{avanzamento}}; height: 6px; border-radius: 3px; background: {{accent}}"></div>
+    </div>
+
+    <sc-if value="{{inCorso}}" hint-placeholder-val="{{ true }}">
+      <div style="position: relative; margin-top: 22px; height: 400px">
+        <div style="position: absolute; left: 24px; right: 24px; top: 24px; height: 360px; border-radius: 28px; background: #E9E8E4"></div>
+        <div style="position: absolute; left: 12px; right: 12px; top: 12px; height: 372px; border-radius: 28px; background: #F0EFEC; box-shadow: 0 1px 2px rgba(20,20,20,0.04)"></div>
+        <article style="position: absolute; left: 0; right: 0; top: 0; height: 384px; box-sizing: border-box; border-radius: 28px; background: #FFFFFF; padding: 22px; box-shadow: 0 2px 4px rgba(20,20,20,0.05), 0 18px 40px rgba(20,20,20,0.10); display: flex; flex-direction: column">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span style="width: 44px; height: 44px; border-radius: 22px; background: #F1EFEA; color: #3F3F46; font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none">{{mail.iniziali}}</span>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+              <span style="font-size: 16px; font-weight: 800">{{mail.mittente}}</span>
+              <span style="font-size: 13px; color: #8A8A92">{{mail.indirizzo}}</span>
+            </div>
+            <span style="font-size: 13px; color: #8A8A92">{{mail.ora}}</span>
+          </div>
+          <h2 style="margin: 18px 0 0 0; font-size: 23px; line-height: 1.2; font-weight: 800; letter-spacing: -0.3px">{{mail.oggetto}}</h2>
+          <p style="margin: 10px 0 0 0; font-size: 16px; line-height: 1.5; color: #52525B">{{mail.riassunto}}</p>
+          <div style="flex: 1"></div>
+          <div style="height: 1px; background: #EFEEEB"></div>
+          <span style="margin-top: 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #8A8A92">SOL PROPONE</span>
+          <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px">
+            <span style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; background: {{mail.sfondo}}; color: {{mail.inchiostro}}; font-size: 16px; font-weight: 800">
+              <span style="width: 10px; height: 10px; border-radius: 5px; background: {{mail.colore}}"></span>
+              {{mail.gruppo}}
+            </span>
+            <span style="font-size: 14px; color: #6B6B73">{{mail.sicurezza}}</span>
+          </div>
+        </article>
+      </div>
+
+      <sc-if value="{{mostraGruppi}}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top: 18px">
+          <span style="font-size: 14px; font-weight: 700; color: #3F3F46">In quale gruppo va?</span>
+          <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{gruppi}}" as="g" hint-placeholder-count="6">
+              <button onClick="{{g.scegli}}" style="height: 48px; border: none; border-radius: 14px; background: {{g.sfondo}}; color: {{g.inchiostro}}; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; padding: 0 14px; cursor: pointer; text-align: left">
+                <span style="width: 10px; height: 10px; border-radius: 5px; background: {{g.colore}}; flex: none"></span>
+                {{g.nome}}
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{nascondiGruppi}}" hint-placeholder-val="{{ true }}">
+        <p style="margin: 18px 0 0 0; text-align: center; font-size: 14px; color: #8A8A92">Oppure scorri: a destra va bene, a sinistra cambi gruppo</p>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{finito}}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top: 120px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px">
+        <span style="width: 88px; height: 88px; border-radius: 44px; background: #FFE8D9; display: flex; align-items: center; justify-content: center">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        </span>
+        <h2 style="margin: 8px 0 0 0; font-size: 26px; font-weight: 800; letter-spacing: -0.4px">Tutto sistemato</h2>
+        <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #52525B; max-width: 290px">Sol si ricorderà queste scelte per le prossime mail degli stessi mittenti.</p>
+        <a href="Main.dc.html" style="margin-top: 14px; height: 52px; padding: 0 24px; border-radius: 16px; background: {{accent}}; color: #FFFFFF; font-size: 16px; font-weight: 800; display: inline-flex; align-items: center">Torna a Oggi</a>
+      </div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{nascondiGruppiInCorso}}" hint-placeholder-val="{{ true }}">
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 20px 26px 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; box-sizing: border-box">
+      <button onClick="{{cambia}}" style="height: 60px; border: none; border-radius: 18px; background: #FFFFFF; color: #1B1B1F; font-size: 17px; font-weight: 800; box-shadow: inset 0 0 0 1.5px #DAD9D5; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+        Cambia
+      </button>
+      <button onClick="{{vaBene}}" style="height: 60px; border: none; border-radius: 18px; background: {{accent}}; color: #FFFFFF; font-size: 17px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; box-shadow: 0 8px 20px rgba(217,72,15,0.28)">
+        Va bene
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+      </button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9480F","options":["#D9480F","#C2410C","#2F6FDB","#0F766E"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { i: 0, scelta: false };
+  }
+  renderVals() {
+    const colori = {
+      Clienti: ['#2F6FDB', '#EAF1FD', '#1E4FA8'],
+      Fornitori: ['#2B8A3E', '#EBF7EE', '#1F6A30'],
+      'Amministrazione e fatture': ['#B7791F', '#FBF3E3', '#8A5A12'],
+      'PEC ed enti': ['#7048E8', '#F1ECFE', '#5532C9'],
+      Newsletter: ['#868E96', '#F1F3F5', '#495057'],
+      Altro: ['#495057', '#EEF0F2', '#343A40']
+    };
+    const mails = [
+      { iniziali: 'FN', mittente: 'Ferramenta Neri', indirizzo: 'ordini@neri.esempio.it', ora: 'ieri', oggetto: 'Preventivo compressore', riassunto: 'Manda il preventivo del compressore: 2.400 euro più IVA, consegna in due settimane.', gruppo: 'Fornitori', sicurezza: 'abbastanza sicuro' },
+      { iniziali: 'LB', mittente: 'Luca Bianchi', indirizzo: 'bianchi@esempio.it', ora: '07:40', oggetto: 'Fattura ottobre', riassunto: 'Manda la fattura di ottobre per la consulenza sul capannone.', gruppo: 'Amministrazione e fatture', sicurezza: 'poco sicuro' },
+      { iniziali: 'SV', mittente: 'Studio Verdi', indirizzo: 'info@studioverdi.esempio.it', ora: 'gio', oggetto: 'Riunione di cantiere lunedì', riassunto: 'Propone la riunione di cantiere lunedì alle 9 in via Roma.', gruppo: 'Clienti', sicurezza: 'poco sicuro' }
+    ];
+    const i = this.state.i;
+    const avanti = () => this.setState({ i: i + 1, scelta: false });
+    const inCorso = i < mails.length;
+    const m = inCorso ? mails[i] : mails[mails.length - 1];
+    const c = colori[m.gruppo];
+    return {
+      accent: this.props.accent ?? '#D9480F',
+      inCorso: inCorso,
+      finito: !inCorso,
+      mostraGruppi: inCorso && this.state.scelta,
+      nascondiGruppi: inCorso && !this.state.scelta,
+      nascondiGruppiInCorso: inCorso && !this.state.scelta,
+      contatore: inCorso ? (i + 1) + ' di ' + mails.length : 'Fatto',
+      avanzamento: Math.round((Math.min(i, mails.length) / mails.length) * 100) + '%',
+      mail: Object.assign({}, m, { colore: c[0], sfondo: c[1], inchiostro: c[2] }),
+      vaBene: avanti,
+      cambia: () => this.setState({ scelta: true }),
+      gruppi: Object.keys(colori).map((nome) => ({ nome: nome, colore: colori[nome][0], sfondo: colori[nome][1], inchiostro: colori[nome][2], scegli: avanti }))
+    };
+  }
+}
+</script>
+</body>
+</html>
